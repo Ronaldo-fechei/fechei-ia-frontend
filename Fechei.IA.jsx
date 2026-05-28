@@ -368,19 +368,17 @@ const Spinner = ({ size = 16, color = "#fff" }) => (
 );
 
 const Logo = ({ size = 22, dark = false }) => (
-  <div style={{ display: "flex", alignItems: "center" }}>
-    <img
-      src="/logo.png"
-      alt="Fechei.IA"
-      style={{
-        width: "10cm",
-        height: "3cm",
-        objectFit: "contain",
-        ...(dark
-          ? { filter: "brightness(0) invert(1)" }
-          : { mixBlendMode: "multiply" }),
-      }}
-    />
+  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+    <div style={{
+      width: size + 12, height: size + 12, borderRadius: 11,
+      background: `linear-gradient(135deg, ${C.ai}, #8E6BFF 60%, ${C.money})`,
+      display: "grid", placeItems: "center", color: "#fff", fontWeight: 800,
+      fontSize: size - 4, boxShadow: "0 8px 20px -8px rgba(108,77,246,.6)",
+    }}>F</div>
+    <span style={{ fontFamily: FONT_DISPLAY, fontSize: size, fontWeight: 600,
+      color: dark ? "#fff" : C.ink, letterSpacing: "-.01em" }}>
+      Fechei<span style={{ color: C.ai }}>.IA</span>
+    </span>
   </div>
 );
 
