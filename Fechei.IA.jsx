@@ -373,8 +373,8 @@ const Logo = ({ size = 22, dark = false }) => (
       src="/logo.png"
       alt="Fechei.IA"
       style={{
-        height: Math.max(80, size * 4),
-        width: "auto",
+        width: "10cm",
+        height: "3cm",
         objectFit: "contain",
         ...(dark
           ? { filter: "brightness(0) invert(1)" }
