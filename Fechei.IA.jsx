@@ -623,11 +623,6 @@ function Landing({ go }) {
     { n: "02", t: "A IA monta tudo", d: "Estrutura completa, escopo, cronograma e argumentos de venda." },
     { n: "03", t: "Ajuste e envie", d: "Edite, exporte em PDF e mande pelo WhatsApp em um clique." },
   ];
-  const testimonials = [
-    { n: "Mariana Alves", r: "Social Media", t: "Parei de perder cliente por orçamento feio. Agora mando uma proposta de agência e fecho mais.", a: "MA" },
-    { n: "Rogério Pinto", r: "Eletricista", t: "Eu mandava preço no WhatsApp e olhava pra cara. Hoje mando PDF profissional. Mudou meu jogo.", a: "RP" },
-    { n: "Camila Souza", r: "Gestora de Tráfego", t: "A IA escreve melhor que eu. Em 4 minutos tenho uma proposta que parece de consultoria grande.", a: "CS" },
-  ];
 
   return (
     <div className="pp-scroll" style={{ background: C.paper, minHeight: "100vh", overflowX: "hidden" }}>
@@ -690,28 +685,36 @@ function Landing({ go }) {
               background: "#fff", borderRadius: 22, padding: 24, border: `1px solid ${C.line}`,
               boxShadow: "0 40px 80px -30px rgba(11,31,58,.4)", transform: "rotate(1.4deg)",
             }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <div style={{ width: 90, height: 9, borderRadius: 6, background: C.ink }} />
-                  <div style={{ width: 130, height: 7, borderRadius: 6, background: C.line }} />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+                <div>
+                  <div style={{ fontFamily: FONT_DISPLAY, fontSize: 16, fontWeight: 700, color: C.ink, lineHeight: 1.2 }}>
+                    Proposta Comercial
+                  </div>
+                  <div style={{ fontSize: 12.5, color: C.mute, marginTop: 3 }}>Para: Loja Aurora</div>
                 </div>
-                <Badge color={C.money}>● Proposta</Badge>
+                <Badge color={C.money}>● Pronta</Badge>
               </div>
               <div style={{
-                height: 110, borderRadius: 14, marginBottom: 16,
+                height: 92, borderRadius: 14, marginBottom: 16,
                 background: `linear-gradient(120deg, ${C.ink}, ${C.inkSoft})`,
-                display: "flex", flexDirection: "column", justifyContent: "center", padding: 20, gap: 8,
+                display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 20px", gap: 6,
               }}>
-                <div style={{ width: "60%", height: 12, borderRadius: 6, background: "#ffffff55" }} />
-                <div style={{ width: "40%", height: 9, borderRadius: 6, background: "#ffffff33" }} />
+                <div style={{ color: "#fff", fontFamily: FONT_DISPLAY, fontSize: 17, fontWeight: 600 }}>
+                  Gestão de Redes Sociais
+                </div>
+                <div style={{ color: "#9FB6D6", fontSize: 12.5, fontWeight: 600 }}>Plano mensal · 90 dias</div>
               </div>
-              {[78, 92, 64].map((w, i) => (
-                <div key={i} style={{ height: 8, width: `${w}%`, borderRadius: 6, background: C.line, marginBottom: 10 }} />
+              {["Planejamento de conteúdo", "20 posts por mês", "Relatório de resultados"].map((item, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 11 }}>
+                  <span style={{ width: 18, height: 18, borderRadius: 6, background: `${C.money}1F`,
+                    color: C.money, fontSize: 11, fontWeight: 900, display: "grid", placeItems: "center", flexShrink: 0 }}>✓</span>
+                  <span style={{ fontSize: 13.5, color: C.ink, fontWeight: 600 }}>{item}</span>
+                </div>
               ))}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
-                marginTop: 18, padding: 14, borderRadius: 12, background: C.paper }}>
-                <span style={{ fontSize: 12, color: C.mute, fontWeight: 700 }}>INVESTIMENTO</span>
-                <span style={{ fontSize: 20, fontWeight: 800, color: C.money, fontFamily: FONT_DISPLAY }}>R$ 2.400</span>
+                marginTop: 16, padding: 14, borderRadius: 12, background: C.paper }}>
+                <span style={{ fontSize: 12, color: C.mute, fontWeight: 700, letterSpacing: ".04em" }}>INVESTIMENTO</span>
+                <span style={{ fontSize: 22, fontWeight: 800, color: C.money, fontFamily: FONT_DISPLAY }}>R$ 2.400</span>
               </div>
             </div>
             <div style={{
@@ -788,34 +791,38 @@ function Landing({ go }) {
         </div>
       </section>
 
-      {/* DEPOIMENTOS */}
+      {/* LANÇAMENTO — seção honesta de early-adopter.
+          👉 Quando tiver depoimentos REAIS de clientes, troque os 3 cards
+             abaixo por aspas reais (nome, profissão e foto/iniciais). */}
       <section style={{ padding: "clamp(50px,7vw,90px) clamp(20px,5vw,64px)", background: C.ink }}>
         <div style={{ maxWidth: 1180, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 50 }}>
-            <Badge color={C.gold} bg="#E9B94922">Quem usa, recomenda</Badge>
+            <Badge color={C.gold} bg="#E9B94922">✦ Acabou de chegar</Badge>
             <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(28px,3.6vw,42px)",
-              color: "#fff", margin: "16px 0", fontWeight: 600 }}>
-              Histórias de quem fechou mais
+              color: "#fff", margin: "16px 0 14px", fontWeight: 600 }}>
+              Seja um dos primeiros a fechar mais com IA
             </h2>
+            <p style={{ color: "#9FB1C9", fontSize: 17, maxWidth: 600, margin: "0 auto", lineHeight: 1.6 }}>
+              Enquanto seu concorrente ainda escreve orçamento no Word, você manda
+              uma proposta de agência em minutos. Comece agora — é grátis.
+            </p>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(290px,1fr))", gap: 22 }}>
-            {testimonials.map((t, i) => (
-              <div key={i} style={{ background: "#13294A", borderRadius: 18, padding: 28,
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 22 }}>
+            {[
+              { icon: "🎯", t: "Comece sem risco", d: "Plano grátis e sem cartão de crédito. Você só evolui de plano se realmente gostar." },
+              { icon: "⚡", t: "Resultado imediato", d: "Em menos de 5 minutos sua primeira proposta profissional está pronta para enviar." },
+              { icon: "🔒", t: "Seus dados protegidos", d: "Cada conta acessa apenas as próprias propostas, com armazenamento seguro." },
+            ].map((c, i) => (
+              <div key={i} style={{ background: "#13294A", borderRadius: 18, padding: 30,
                 border: "1px solid #1F3A5F" }}>
-                <div style={{ color: C.gold, fontSize: 18, marginBottom: 14 }}>★★★★★</div>
-                <p style={{ color: "#D6E0EE", fontSize: 15.5, lineHeight: 1.65, marginBottom: 22 }}>
-                  "{t.t}"
-                </p>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ width: 42, height: 42, borderRadius: 11, background: `linear-gradient(135deg,${C.ai},${C.money})`,
-                    display: "grid", placeItems: "center", color: "#fff", fontWeight: 800, fontSize: 14 }}>{t.a}</div>
-                  <div>
-                    <div style={{ color: "#fff", fontWeight: 800, fontSize: 14.5 }}>{t.n}</div>
-                    <div style={{ color: "#8FA3BE", fontSize: 13 }}>{t.r}</div>
-                  </div>
-                </div>
+                <div style={{ fontSize: 30, marginBottom: 16 }}>{c.icon}</div>
+                <h3 style={{ color: "#fff", fontWeight: 800, fontSize: 19, marginBottom: 9 }}>{c.t}</h3>
+                <p style={{ color: "#A9BAD2", fontSize: 15, lineHeight: 1.65 }}>{c.d}</p>
               </div>
             ))}
+          </div>
+          <div style={{ textAlign: "center", marginTop: 44 }}>
+            <Btn kind="money" size="lg" onClick={() => go("signup")}>Criar minha conta grátis →</Btn>
           </div>
         </div>
       </section>
