@@ -901,6 +901,7 @@ function Landing({ go }) {
       </section>
 
       <Footer go={go} />
+      <WhatsAppWidget />
       <style>{`
         html { scroll-behavior: smooth; }
         #como-funciona, #planos { scroll-margin-top: 84px; }
@@ -951,6 +952,81 @@ function PlanCards({ go, currentPlan, onPick }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+/* ---------- Botão flutuante de WhatsApp com perguntas prontas ---------- */
+const WA_NUMBER = "5511984127054"; // 55 (Brasil) + 11 98412-7054
+function WhatsAppWidget() {
+  const [open, setOpen] = useState(false);
+  const quick = [
+    { label: "💬 Quais são os planos e preços?", msg: "Olá! Vi o site do Fechei.IA e queria saber mais sobre os planos e preços." },
+    { label: "🤖 Como funciona a criação de propostas?", msg: "Olá! Queria entender como o Fechei.IA cria propostas com IA." },
+    { label: "🎁 Quero testar grátis", msg: "Olá! Quero começar no plano grátis do Fechei.IA. Pode me ajudar?" },
+    { label: "🙋 Falar com uma pessoa", msg: "Olá! Preciso de ajuda com o Fechei.IA." },
+  ];
+  const send = (msg) =>
+    window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, "_blank", "noopener");
+
+  return (
+    <div className="pp-noprint" style={{ position: "fixed", right: "clamp(16px,4vw,28px)", bottom: "clamp(16px,4vw,28px)", zIndex: 60 }}>
+      {/* Painel */}
+      {open && (
+        <div style={{
+          position: "absolute", bottom: 76, right: 0, width: "min(330px, calc(100vw - 36px))",
+          background: "#fff", borderRadius: 18, overflow: "hidden",
+          boxShadow: "0 30px 60px -18px rgba(11,31,58,.45)", border: `1px solid ${C.line}`,
+          animation: "ppFloat .25s ease",
+        }}>
+          {/* Cabeçalho */}
+          <div style={{ background: "linear-gradient(120deg, #25D366, #1FAE6B)", padding: "18px 20px",
+            display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 42, height: 42, borderRadius: 12, background: "rgba(255,255,255,.18)",
+              display: "grid", placeItems: "center", color: "#fff", fontWeight: 800,
+              fontFamily: FONT_DISPLAY, fontSize: 20 }}>F</div>
+            <div>
+              <div style={{ color: "#fff", fontWeight: 800, fontSize: 15.5 }}>Fechei.IA</div>
+              <div style={{ color: "#E4FBEC", fontSize: 12.5, display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#C6FFD9", display: "inline-block" }} />
+                Normalmente responde rápido
+              </div>
+            </div>
+          </div>
+          {/* Corpo */}
+          <div style={{ padding: 18, background: "#F2F5F9" }}>
+            <div style={{ background: "#fff", borderRadius: "4px 14px 14px 14px", padding: "12px 14px",
+              fontSize: 14, color: C.ink, lineHeight: 1.55, marginBottom: 14,
+              boxShadow: "0 2px 6px -3px rgba(11,31,58,.2)" }}>
+              Olá! 👋 Sobre o que você quer falar? Escolha uma opção:
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+              {quick.map((q, i) => (
+                <button key={i} onClick={() => send(q.msg)} className="pp-btn" style={{
+                  textAlign: "left", background: "#fff", border: `1px solid ${C.line}`,
+                  borderRadius: 12, padding: "11px 14px", fontSize: 13.5, fontWeight: 600,
+                  color: C.ink, cursor: "pointer", width: "100%",
+                }}>{q.label}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Botão verde */}
+      <button onClick={() => setOpen((v) => !v)} aria-label="Abrir conversa no WhatsApp"
+        className="pp-btn" style={{
+          width: 60, height: 60, borderRadius: "50%", border: "none", cursor: "pointer",
+          background: open ? C.ink : "#25D366", display: "grid", placeItems: "center",
+          boxShadow: "0 14px 30px -10px rgba(37,211,102,.7)", marginLeft: "auto",
+        }}>
+        {open ? (
+          <span style={{ color: "#fff", fontSize: 26, fontWeight: 400, lineHeight: 1 }}>×</span>
+        ) : (
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="#fff">
+            <path d="M.057 24l1.687-6.163a11.867 11.867 0 0 1-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 0 1 8.413 3.488 11.824 11.824 0 0 1 3.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 0 1-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884a9.821 9.821 0 0 0 1.692 5.514l-.999 3.648 3.737-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+          </svg>
+        )}
+      </button>
     </div>
   );
 }
