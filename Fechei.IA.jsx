@@ -830,7 +830,10 @@ function Landing({ go }) {
             ))}
           </div>
           <div style={{ textAlign: "center", marginTop: 44 }}>
-            <Btn kind="money" size="lg" onClick={() => go("signup")}>Criar minha conta grátis →</Btn>
+            <Btn kind="money" size="lg" onClick={() => go("signup")}>Começar agora — é grátis →</Btn>
+            <p style={{ color: "#8499B5", fontSize: 13.5, fontWeight: 600, marginTop: 14 }}>
+              Leva menos de 1 minuto para criar sua conta
+            </p>
           </div>
         </div>
       </section>
@@ -887,10 +890,13 @@ function Landing({ go }) {
             color: "#fff", fontWeight: 600, marginBottom: 16, letterSpacing: "-.02em" }}>
             Sua próxima proposta pode fechar hoje.
           </h2>
-          <p style={{ color: "#C9D6E8", fontSize: 18, marginBottom: 32, maxWidth: 520, margin: "0 auto 32px" }}>
+          <p style={{ color: "#C9D6E8", fontSize: 18, marginBottom: 28, maxWidth: 520, margin: "0 auto 28px" }}>
             Crie agora, grátis. Em 5 minutos você tem uma proposta de agência na mão.
           </p>
-          <Btn kind="money" size="lg" onClick={() => go("signup")}>Criar minha primeira proposta →</Btn>
+          <Btn kind="money" size="lg" onClick={() => go("signup")}>Quero criar minha proposta grátis →</Btn>
+          <p style={{ color: "#9FB1C9", fontSize: 13.5, fontWeight: 600, marginTop: 16 }}>
+            ✓ Grátis para começar &nbsp;·&nbsp; ✓ Sem cartão de crédito &nbsp;·&nbsp; ✓ Cancele quando quiser
+          </p>
         </div>
       </section>
 
