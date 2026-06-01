@@ -635,6 +635,14 @@ function Landing({ go }) {
       }}>
         <Logo />
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <a href="#como-funciona" className="pp-navlink" style={{
+            color: C.mute, fontWeight: 700, fontSize: 14.5, padding: "8px 12px",
+            textDecoration: "none", cursor: "pointer",
+          }}>Como funciona</a>
+          <a href="#planos" className="pp-navlink" style={{
+            color: C.mute, fontWeight: 700, fontSize: 14.5, padding: "8px 12px",
+            textDecoration: "none", cursor: "pointer",
+          }}>Planos</a>
           <button onClick={() => go("login")} className="pp-btn" style={{
             background: "none", color: C.ink, fontWeight: 700, fontSize: 14.5, padding: "8px 12px",
           }}>Entrar</button>
@@ -769,7 +777,7 @@ function Landing({ go }) {
       </section>
 
       {/* COMO FUNCIONA */}
-      <section style={{ padding: "clamp(50px,7vw,90px) clamp(20px,5vw,64px)" }}>
+      <section id="como-funciona" style={{ padding: "clamp(50px,7vw,90px) clamp(20px,5vw,64px)" }}>
         <div style={{ maxWidth: 1180, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 56 }}>
             <Badge color={C.money}>Simples assim</Badge>
@@ -887,7 +895,13 @@ function Landing({ go }) {
       </section>
 
       <Footer go={go} />
-      <style>{`@media (max-width: 880px){ .pp-hero-grid{ grid-template-columns:1fr !important; } }`}</style>
+      <style>{`
+        html { scroll-behavior: smooth; }
+        #como-funciona, #planos { scroll-margin-top: 84px; }
+        .pp-navlink:hover { color: ${C.ink}; }
+        @media (max-width: 880px){ .pp-hero-grid{ grid-template-columns:1fr !important; } }
+        @media (max-width: 720px){ .pp-navlink{ display:none !important; } }
+      `}</style>
     </div>
   );
 }
