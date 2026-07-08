@@ -1067,9 +1067,8 @@ function AuthShell({ children, title, sub }) {
   return (
     <div style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: "1fr 1fr",
       background: C.paper }} className="pp-auth-grid">
-      <div style={{ display: "none", position: "relative", overflow: "hidden",
-        background: `linear-gradient(150deg, ${C.ink}, ${C.inkSoft} 60%, ${C.ai})` }}
-        className="pp-auth-side">
+      <div className="pp-auth-side" style={{ position: "relative", overflow: "hidden",
+        background: `linear-gradient(150deg, ${C.ink}, ${C.inkSoft} 60%, ${C.ai})` }}>
         <div style={{ position: "absolute", inset: 0, opacity: .35,
           background: `radial-gradient(50% 40% at 75% 20%, ${C.money}55 0%, transparent 60%)` }} />
         <div style={{ position: "relative", padding: 56, height: "100%",
@@ -1098,7 +1097,8 @@ function AuthShell({ children, title, sub }) {
         </div>
       </div>
       <style>{`
-        @media (min-width: 900px){ .pp-auth-side{ display:block !important; } .pp-auth-logo{ display:none; } }
+        .pp-auth-side { display: none; }
+        @media (min-width: 900px){ .pp-auth-side{ display:block; } .pp-auth-logo{ display:none; } }
         @media (max-width: 899px){ .pp-auth-grid{ grid-template-columns:1fr !important; } }
       `}</style>
     </div>
