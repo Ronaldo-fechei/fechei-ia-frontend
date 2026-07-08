@@ -1,0 +1,37 @@
+/* Estilo compartilhado do blog Fechei.IA */
+:root{--ink:#0B1F3A;--paper:#F7F9FC;--line:#E4EAF2;--mute:#5E6E85;--money:#1FAE6B;--ai:#6C4DF6;--aisoft:#EEEAFE}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--paper);color:var(--ink);line-height:1.7}
+header{position:sticky;top:0;background:rgba(247,249,252,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:14px clamp(16px,4vw,40px);display:flex;justify-content:space-between;align-items:center;z-index:10}
+.logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink);font-weight:800;font-size:18px}
+.logo .f{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#6C4DF6,#8E6BFF 60%,#1FAE6B);color:#fff;display:grid;place-items:center;font-family:Fraunces,Georgia,serif;font-weight:700;font-size:18px}
+.cta-top{background:linear-gradient(120deg,#6C4DF6,#8E6BFF);color:#fff;padding:9px 16px;border-radius:11px;text-decoration:none;font-weight:700;font-size:14px;white-space:nowrap}
+main{max-width:760px;margin:0 auto;padding:40px 20px 60px}
+h1{font-family:Fraunces,Georgia,serif;font-size:clamp(30px,5vw,42px);font-weight:600;line-height:1.15;letter-spacing:-.02em;margin-bottom:14px}
+h2{font-family:Fraunces,Georgia,serif;font-size:26px;font-weight:600;margin:36px 0 12px}
+h3{font-size:19px;margin:26px 0 10px}
+p{margin-bottom:14px;color:#33425A;font-size:16.5px}
+ul,ol{margin:0 0 16px 22px;color:#33425A;font-size:16.5px}
+li{margin-bottom:8px}
+a{color:var(--ai)}
+.meta{color:var(--mute);font-size:14px;margin-bottom:28px}
+.box{background:#fff;border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:18px 0}
+.box p:last-child{margin-bottom:0}
+.msg{background:#E7F8EE;border:1px solid #BDE8CF;border-radius:14px;padding:18px 20px;margin:14px 0;font-size:15.5px;color:#14532D;white-space:pre-line}
+.cta-box{background:linear-gradient(135deg,#0B1F3A,#1B3A5F);border-radius:18px;padding:30px 26px;color:#fff;margin:36px 0;text-align:center}
+.cta-box h3{font-family:Fraunces,Georgia,serif;font-size:24px;font-weight:600;color:#fff;margin:0 0 8px}
+.cta-box p{color:#C9D6E8;margin-bottom:0}
+.botao{display:inline-block;background:linear-gradient(120deg,#1FAE6B,#28C57E);color:#fff;padding:13px 26px;border-radius:13px;text-decoration:none;font-weight:800;margin-top:16px}
+.artigos{list-style:none;margin:0}
+.artigos li{background:#fff;border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:14px}
+.artigos a{font-weight:800;font-size:18px;color:var(--ink);text-decoration:none}
+.artigos a:hover{color:var(--ai)}
+.artigos p{margin:6px 0 0;font-size:14.5px;color:var(--mute)}
+.relacionados{background:var(--aisoft);border-radius:14px;padding:20px 22px;margin:30px 0}
+.relacionados h3{margin-top:0}
+.relacionados ul{margin-bottom:0}
+footer{border-top:1px solid var(--line);padding:26px 20px;text-align:center;color:var(--mute);font-size:13.5px}
+footer a{color:var(--mute)}
+table{width:100%;border-collapse:collapse;margin:0 0 16px;font-size:15px;background:#fff;border-radius:12px;overflow:hidden}
+th{background:var(--ink);color:#fff;text-align:left;padding:10px 14px;font-size:13px;text-transform:uppercase;letter-spacing:.04em}
+td{padding:10px 14px;border-bottom:1px solid var(--line);color:#33425A}

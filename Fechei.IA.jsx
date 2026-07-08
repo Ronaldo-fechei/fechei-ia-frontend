@@ -119,6 +119,10 @@ const API = {
   async deleteProposal(id) {
     await apiFetch(`/proposals/${id}`, { method: "DELETE" });
   },
+  async publicProposal(link) {
+    const r = await apiFetch(`/proposals/public/${link}`, { auth: false });
+    return r.proposal;
+  },
   /* ---- Perfil ---- */
   async updateProfile(patch) {
     const r = await apiFetch("/auth/profile", { method: "PUT", body: patch });
@@ -132,6 +136,14 @@ const fmtMoney = (v) =>
   (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const fmtDate = (iso) =>
   new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
+const timeAgo = (iso) => {
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return "agora mesmo";
+  const m = Math.floor(s / 60); if (m < 60) return `há ${m} min`;
+  const h = Math.floor(m / 60); if (h < 24) return `há ${h} h`;
+  const d = Math.floor(h / 24); if (d < 30) return `há ${d} dia${d > 1 ? "s" : ""}`;
+  return `em ${fmtDate(iso)}`;
+};
 
 /* ---------- Catálogos ---------- */
 const SERVICE_TYPES = [
@@ -606,6 +618,205 @@ async function quickAI(action, text) {
 }
 
 /* ============================================================================
+   PROPOSTA DE EXEMPLO — mostrada ao visitante antes de criar conta
+   ============================================================================ */
+const EXAMPLE_PROPOSAL = {
+  id: "exemplo",
+  title: "Gestão de Redes Sociais para a Loja Aurora",
+  client_name: "Carla Menezes",
+  client_company: "Loja Aurora",
+  service_type: "Social Media",
+  status: "enviada",
+  total_value: 2400,
+  created_at: new Date().toISOString(),
+  public_link: "", public_enabled: false,
+  data: {
+    provider: {
+      name: "Estúdio Mirante", doc: "", phone: "(11) 98765-4321",
+      email: "contato@estudiomirante.com.br", site: "estudiomirante.com.br",
+      logo: "", color: "#6C4DF6", about: "",
+    },
+    client: {
+      name: "Carla Menezes", company: "Loja Aurora", email: "", phone: "",
+      segment: "Moda feminina", problem: "",
+    },
+    project: {
+      title: "Gestão de Redes Sociais", goal: "", scope: "", deliverables: "",
+      deadline: "90 dias", steps: "", revisions: "2", notes: "",
+    },
+    commercial: {
+      total: "2400", payment: "Pix ou cartão de crédito",
+      installments: "Mensalidade fixa, sem taxa de adesão", entry: "",
+      recurring: "Plano mensal com renovação automática", validity: "15 dias",
+      conditions: "Cancelamento com aviso prévio de 30 dias", taxes: "Impostos inclusos", extra: "",
+    },
+    plans: [],
+  },
+  content: {
+    presentation:
+      "Somos o Estúdio Mirante, especialistas em transformar redes sociais em canais de venda. Nos últimos anos ajudamos lojas e marcas locais a saírem do improviso e construírem uma presença digital consistente, com conteúdo que atrai, engaja e converte.",
+    understanding:
+      "A Loja Aurora tem produtos de qualidade e clientes fiéis, mas a presença nas redes sociais ainda não reflete o potencial da marca. As publicações acontecem sem frequência definida, sem identidade visual consistente e sem estratégia de conversão — o que significa vendas deixadas na mesa todos os meses.",
+    objective:
+      "Estruturar e executar a presença digital da Loja Aurora no Instagram e no Facebook, aumentando o alcance da marca, o engajamento com o público e, principalmente, as vendas geradas pelos canais digitais nos próximos 90 dias.",
+    solution:
+      "Propomos um plano completo de gestão de redes sociais: planejamento estratégico mensal, produção de conteúdo com identidade visual profissional, publicação consistente e análise de resultados. Você foca no seu negócio — a gente cuida da sua presença digital.",
+    scope:
+      "O serviço inclui o planejamento editorial mensal, a criação e publicação de conteúdo, a gestão da comunidade (respostas a comentários e mensagens em horário comercial) e o acompanhamento de métricas com relatório mensal de resultados.",
+    deliverables: [
+      "Planejamento editorial mensal aprovado com você",
+      "20 posts por mês (feed + stories) com design profissional",
+      "Legendas estratégicas com chamadas para ação",
+      "Gestão de comentários e mensagens em horário comercial",
+      "Relatório mensal de resultados com análise e próximos passos",
+    ],
+    schedule: [
+      { phase: "Semana 1", detail: "Diagnóstico, definição de linha editorial e identidade dos posts", time: "7 dias" },
+      { phase: "Semana 2", detail: "Produção do primeiro lote de conteúdo e aprovação", time: "7 dias" },
+      { phase: "Semanas 3 e 4", detail: "Publicação, gestão diária e primeiros ajustes", time: "14 dias" },
+      { phase: "Meses 2 e 3", detail: "Ciclo mensal: planejar → produzir → publicar → medir", time: "60 dias" },
+    ],
+    differentials: [
+      "Conteúdo criado para vender, não só para \"marcar presença\"",
+      "Relatório mensal em linguagem simples, sem jargão técnico",
+      "Resposta rápida: ajustes de rota em até 48h",
+      "Sem fidelidade: você fica porque está vendo resultado",
+    ],
+    nextSteps: [
+      "Você aprova esta proposta respondendo a mensagem",
+      "Enviamos o contrato e o link de pagamento da primeira mensalidade",
+      "Agendamos a reunião de kickoff e começamos o diagnóstico",
+    ],
+    closing:
+      "A Loja Aurora já tem o que muitas marcas sonham: produto bom e clientes que voltam. Falta só o mundo digital ficar sabendo. Vamos fazer isso juntos?",
+  },
+  messages: {},
+};
+
+function ExampleView({ go }) {
+  return (
+    <div style={{ background: "#E9EDF3", minHeight: "100vh", padding: "clamp(12px,4vw,40px)" }}>
+      <div style={{ maxWidth: 820, margin: "0 auto 16px", display: "flex",
+        justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+        <Logo size={18} />
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Btn kind="ghost" size="sm" onClick={() => go("landing")}>← Voltar</Btn>
+          <Btn kind="money" size="sm" onClick={() => go("signup")}>Quero criar a minha grátis →</Btn>
+        </div>
+      </div>
+      <div style={{ maxWidth: 820, margin: "0 auto 10px", background: C.aiSoft,
+        border: `1px solid ${C.ai}33`, borderRadius: 12, padding: "12px 18px",
+        fontSize: 13.5, fontWeight: 700, color: C.ai, textAlign: "center" }}>
+        ✦ Esta proposta é um exemplo real do que a IA do Fechei.IA gera em menos de 5 minutos
+      </div>
+      <div style={{ maxWidth: 820, margin: "0 auto", borderRadius: 14, overflow: "hidden",
+        boxShadow: "0 30px 70px -30px rgba(11,31,58,.4)" }}>
+        <ProposalDoc p={EXAMPLE_PROPOSAL} />
+      </div>
+      <div style={{ maxWidth: 820, margin: "24px auto 0", background: "#fff",
+        borderRadius: 16, border: `1px solid ${C.line}`, padding: "28px 24px", textAlign: "center" }}>
+        <h3 style={{ fontFamily: FONT_DISPLAY, fontSize: 24, color: C.ink, fontWeight: 600, marginBottom: 8 }}>
+          Sua proposta pode ficar assim ainda hoje
+        </h3>
+        <p style={{ color: C.mute, fontSize: 15, marginBottom: 20 }}>
+          Você responde algumas perguntas simples, a IA escreve tudo. Grátis, sem cartão de crédito.
+        </p>
+        <Btn kind="money" size="lg" onClick={() => go("signup")}>
+          Criar minha proposta grátis →
+        </Btn>
+      </div>
+      <p style={{ textAlign: "center", color: C.mute, fontSize: 12.5, marginTop: 20 }}>
+        Proposta gerada com Fechei.IA · Os nomes deste exemplo são fictícios
+      </p>
+    </div>
+  );
+}
+
+/* ============================================================================
+   CALCULADORA DE ECONOMIA — mostra quanto o visitante perde fazendo na mão
+   ============================================================================ */
+function SavingsCalculator({ go }) {
+  const [qty, setQty] = useState(4);    // propostas por mês
+  const [hrs, setHrs] = useState(3);    // horas por proposta hoje
+  const [rate, setRate] = useState(80); // valor da hora de trabalho (R$)
+
+  const spent = qty * hrs;                            // horas gastas por mês hoje
+  const saved = Math.max(0, spent - qty * (10 / 60)); // com Fechei.IA: ~10 min por proposta
+  const money = saved * rate;
+  const savedLabel = saved >= 10 ? Math.round(saved) : Math.round(saved * 10) / 10;
+
+  const Slider = ({ label, value, set, min, max, step, suffix }) => (
+    <div style={{ marginBottom: 22 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: "#C9D6E8" }}>{label}</span>
+        <span style={{ fontSize: 15, fontWeight: 800, color: "#fff" }}>{value}{suffix}</span>
+      </div>
+      <input type="range" min={min} max={max} step={step} value={value}
+        onChange={(e) => set(Number(e.target.value))}
+        style={{ width: "100%", accentColor: C.money, cursor: "pointer" }} />
+    </div>
+  );
+
+  return (
+    <section style={{ padding: "clamp(50px,7vw,90px) clamp(20px,5vw,64px)",
+      background: `linear-gradient(150deg, ${C.ink}, ${C.inkSoft})` }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 44 }}>
+          <Badge color="#fff" bg="#ffffff22">Faça as contas</Badge>
+          <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(28px,3.6vw,44px)",
+            color: "#fff", margin: "16px 0 12px", fontWeight: 600, letterSpacing: "-.02em" }}>
+            Quanto custa escrever proposta na mão?
+          </h2>
+          <p style={{ color: "#A9BDD6", fontSize: 17, maxWidth: 560, margin: "0 auto" }}>
+            Arraste os controles e veja quanto do seu tempo (e dinheiro) vai embora todo mês.
+          </p>
+        </div>
+
+        <div className="pp-calc-grid" style={{ display: "grid",
+          gridTemplateColumns: "1fr 1fr", gap: 28, alignItems: "center" }}>
+          <div style={{ background: "#ffffff10", border: "1px solid #ffffff22",
+            borderRadius: 20, padding: "30px 28px" }}>
+            <Slider label="Propostas por mês" value={qty} set={setQty}
+              min={1} max={30} step={1} suffix="" />
+            <Slider label="Horas gastas em cada proposta" value={hrs} set={setHrs}
+              min={1} max={8} step={0.5} suffix="h" />
+            <Slider label="Quanto vale sua hora de trabalho" value={rate} set={setRate}
+              min={30} max={300} step={10} suffix=" R$" />
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div style={{ background: "#ffffff10", border: "1px solid #ffffff22",
+                borderRadius: 16, padding: "22px 20px", textAlign: "center" }}>
+                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(28px,3vw,38px)",
+                  fontWeight: 600, color: "#fff", lineHeight: 1 }}>{savedLabel}h</div>
+                <div style={{ fontSize: 13, color: "#A9BDD6", marginTop: 8, fontWeight: 600 }}>
+                  economizadas por mês</div>
+              </div>
+              <div style={{ background: "#ffffff10", border: `1px solid ${C.money}66`,
+                borderRadius: 16, padding: "22px 20px", textAlign: "center" }}>
+                <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(28px,3vw,38px)",
+                  fontWeight: 600, color: C.money, lineHeight: 1 }}>{fmtMoney(money)}</div>
+                <div style={{ fontSize: 13, color: "#A9BDD6", marginTop: 8, fontWeight: 600 }}>
+                  do seu tempo, todo mês</div>
+              </div>
+            </div>
+            <div style={{ background: "#ffffff10", border: "1px solid #ffffff22",
+              borderRadius: 16, padding: "20px 22px", fontSize: 14.5, color: "#C9D6E8", lineHeight: 1.6 }}>
+              Com o Fechei.IA, cada proposta leva <b style={{ color: "#fff" }}>cerca de 10 minutos</b>.
+              O plano Pro custa menos do que <b style={{ color: "#fff" }}>1 hora</b> do seu trabalho.
+            </div>
+            <Btn kind="money" size="lg" onClick={() => go("signup")} style={{ width: "100%" }}>
+              Quero recuperar essas {savedLabel} horas →
+            </Btn>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ============================================================================
    LANDING PAGE — página de vendas de alta conversão
    ============================================================================ */
 function Landing({ go }) {
@@ -679,7 +890,7 @@ function Landing({ go }) {
               <Btn kind="ai" size="lg" onClick={() => go("signup")}>
                 Criar minha primeira proposta →
               </Btn>
-              <Btn kind="ghost" size="lg" onClick={() => go("login")}>Já tenho conta</Btn>
+              <Btn kind="ghost" size="lg" onClick={() => go("exemplo")}>Ver uma proposta pronta</Btn>
             </div>
             <div style={{ display: "flex", gap: 22, marginTop: 30, flexWrap: "wrap", color: C.mute, fontSize: 13.5, fontWeight: 600 }}>
               <span>✓ Grátis para começar</span>
@@ -687,11 +898,12 @@ function Landing({ go }) {
               <span>✓ Pronto em 5 minutos</span>
             </div>
           </div>
-          {/* mock visual */}
+          {/* mock visual — clicável, abre a proposta de exemplo */}
           <div className="pp-anim" style={{ animationDelay: ".15s", position: "relative" }}>
-            <div className="pp-card" style={{
+            <div className="pp-card pp-lift" onClick={() => go("exemplo")} title="Ver a proposta completa" style={{
               background: "#fff", borderRadius: 22, padding: 24, border: `1px solid ${C.line}`,
               boxShadow: "0 40px 80px -30px rgba(11,31,58,.4)", transform: "rotate(1.4deg)",
+              cursor: "pointer",
             }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
                 <div>
@@ -838,6 +1050,9 @@ function Landing({ go }) {
         </div>
       </section>
 
+      {/* CALCULADORA DE ECONOMIA */}
+      <SavingsCalculator go={go} />
+
       {/* PLANOS */}
       <section id="planos" style={{ padding: "clamp(50px,7vw,90px) clamp(20px,5vw,64px)", background: "#fff" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
@@ -907,6 +1122,7 @@ function Landing({ go }) {
         #como-funciona, #planos { scroll-margin-top: 84px; }
         .pp-navlink:hover { color: ${C.ink}; }
         @media (max-width: 880px){ .pp-hero-grid{ grid-template-columns:1fr !important; } }
+        @media (max-width: 880px){ .pp-calc-grid{ grid-template-columns:1fr !important; } }
         @media (max-width: 720px){ .pp-navlink{ display:none !important; } }
       `}</style>
     </div>
@@ -1046,6 +1262,7 @@ function Footer({ go }) {
         <div style={{ display: "flex", gap: 30, fontSize: 13.5, flexWrap: "wrap" }}>
           <a onClick={() => go("login")} style={{ cursor: "pointer" }}>Entrar</a>
           <a onClick={() => go("signup")} style={{ cursor: "pointer" }}>Criar conta</a>
+          <a href="/blog/" style={{ cursor: "pointer", textDecoration: "none" }}>Blog</a>
           <a onClick={() => go("privacy")} style={{ cursor: "pointer" }}>Privacidade</a>
           <a onClick={() => go("terms")} style={{ cursor: "pointer" }}>Termos de uso</a>
         </div>
@@ -1466,6 +1683,11 @@ function Dashboard({ user, proposals, go, onOpen, onDuplicate, onDelete, onExpor
                   <span>👤 {p.client_name || "Sem cliente"}</span>
                   <span>📅 {fmtDate(p.created_at)}</span>
                   <span style={{ fontWeight: 700, color: C.money }}>{fmtMoney(p.total_value)}</span>
+                  {p.viewed_at && (
+                    <span style={{ fontWeight: 700, color: C.ai }}>
+                      👁 Visualizada {timeAgo(p.viewed_at)}{p.view_count > 1 ? ` · ${p.view_count}x` : ""}
+                    </span>
+                  )}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
@@ -1533,7 +1755,7 @@ function Wizard({ user, draft, onCancel, onGenerated }) {
     setGenMsg("Escrevendo a proposta com IA…");
     const content = await generateProposal(d);
     setGenMsg("Gerando mensagens para WhatsApp e e-mail…");
-    const link = `fechei.ia/p/${uid()}`;
+    const link = `fecheiia.com.br/p/${uid()}`;
     const msgs = await generateMessages(d, d.project.title || "Proposta", `https://${link}`);
     setGenMsg("Finalizando…");
     await new Promise((r) => setTimeout(r, 400));
@@ -2311,7 +2533,12 @@ function Editor({ user, proposal, onSave, onClose }) {
         </div>
       )}
 
-      {tab === "share" && <ShareTab p={p} user={user} />}
+      {tab === "share" && <ShareTab p={p} user={user}
+        onTogglePublic={(enabled) => {
+          const updated = { ...p, public_enabled: enabled, updated_at: todayStr() };
+          setP(updated);
+          onSave(updated);
+        }} />}
       {tab === "contract" && <ContractTab p={p} />}
 
       {/* container oculto para impressão */}
@@ -2323,7 +2550,7 @@ function Editor({ user, proposal, onSave, onClose }) {
 }
 
 /* ---------- Aba Compartilhar ---------- */
-function ShareTab({ p, user }) {
+function ShareTab({ p, user, onTogglePublic }) {
   const m = p.messages || {};
   const [copied, setCopied] = useState("");
   const [pub, setPub] = useState(p.public_enabled);
@@ -2331,7 +2558,9 @@ function ShareTab({ p, user }) {
     navigator.clipboard?.writeText(txt);
     setCopied(id); setTimeout(() => setCopied(""), 1600);
   };
-  const link = `https://${p.public_link}`;
+  // Extrai só o código do link (compatível com propostas antigas)
+  const code = String(p.public_link || "").split("/").pop();
+  const link = `https://fecheiia.com.br/p/${code}`;
   const wpps = [
     ["wppFormal", "Formal"], ["wppDireta", "Direta"],
     ["wppPersuasiva", "Persuasiva"], ["wppAmigavel", "Amigável"],
@@ -2346,10 +2575,18 @@ function ShareTab({ p, user }) {
         </p>
         <label style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 16,
           fontSize: 14, fontWeight: 600, color: C.ink, cursor: "pointer" }}>
-          <input type="checkbox" checked={pub} onChange={(e) => setPub(e.target.checked)}
+          <input type="checkbox" checked={pub}
+            onChange={(e) => { setPub(e.target.checked); onTogglePublic?.(e.target.checked); }}
             style={{ accentColor: C.money, width: 18, height: 18 }} />
           Ativar link público compartilhável
         </label>
+        {pub && p.viewed_at && (
+          <div style={{ background: C.aiSoft, borderRadius: 10, padding: "10px 14px",
+            marginBottom: 14, fontSize: 13.5, fontWeight: 700, color: C.ai }}>
+            👁 Visualizada pelo cliente {timeAgo(p.viewed_at)}
+            {p.view_count > 1 ? ` · ${p.view_count} visualizações` : ""}
+          </div>
+        )}
         {pub && (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Input readOnly value={link} style={{ flex: 1, minWidth: 220, background: C.paper }} />
@@ -2807,6 +3044,18 @@ export default function App() {
   /* sessão persistida */
   useEffect(() => {
     (async () => {
+      // Link público de proposta: fecheiia.com.br/p/CODIGO (sem login)
+      const pubMatch = window.location.pathname.match(/^\/p\/([A-Za-z0-9]+)/);
+      if (pubMatch && backendOn()) {
+        try {
+          const prop = await API.publicProposal(pubMatch[1]);
+          setPublicProp(prop);
+        } catch {}
+        setView("public");
+        setBooting(false);
+        return;
+      }
+
       // PRODUÇÃO: reidrata o token e busca dados do servidor.
       if (backendOn()) {
         const tok = await DB.get("pp_token", null);
@@ -2968,7 +3217,7 @@ export default function App() {
         const saved = await API.createProposal({
           ...rest,
           title: src.title + " (cópia)", status: "rascunho",
-          public_link: `fechei.ia/p/${uid()}`, public_enabled: false,
+          public_link: `fecheiia.com.br/p/${uid()}`, public_enabled: false,
         });
         setProposals([saved, ...proposals]);
         return;
@@ -2979,7 +3228,7 @@ export default function App() {
     }
     const copy = { ...base, id: uid(),
       title: src.title + " (cópia)", status: "rascunho",
-      public_link: `fechei.ia/p/${uid()}`, public_enabled: false,
+      public_link: `fecheiia.com.br/p/${uid()}`, public_enabled: false,
       created_at: todayStr(), updated_at: todayStr() };
     await persist([...proposals, copy]);
   }
@@ -3069,6 +3318,8 @@ export default function App() {
     return <><GlobalStyle /><LegalPage kind={view} go={go} /></>;
   if (view === "public")
     return <><GlobalStyle /><PublicView proposal={publicProp} go={go} /></>;
+  if (view === "exemplo")
+    return <><GlobalStyle /><ExampleView go={go} /></>;
 
   /* rotas autenticadas */
   if (!user)
