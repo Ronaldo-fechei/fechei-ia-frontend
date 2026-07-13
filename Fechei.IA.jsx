@@ -71,9 +71,10 @@ const Session = {
 };
 
 /* Chamada HTTP ao backend, com token quando autenticado. */
-async function apiFetch(path, { method = "GET", body, auth = true } = {}) {
+async function apiFetch(path, { method = "GET", body, auth = true, token } = {}) {
   const headers = { "Content-Type": "application/json" };
-  if (auth && Session.get()) headers.Authorization = `Bearer ${Session.get()}`;
+  if (token) headers.Authorization = `Bearer ${token}`;
+  else if (auth && Session.get()) headers.Authorization = `Bearer ${Session.get()}`;
   const res = await fetch(`${BACKEND.url}${path}`, {
     method,
     headers,
@@ -102,6 +103,14 @@ const API = {
   async logout() {
     Session.set(null);
     await DB.del("pp_token");
+  },
+  async recover(email) {
+    return apiFetch("/auth/recover", { method: "POST", body: { email }, auth: false });
+  },
+  async resetPassword(token, password) {
+    return apiFetch("/auth/reset-password", {
+      method: "POST", body: { password }, auth: false, token,
+    });
   },
   /* ---- Propostas ---- */
   async listProposals() {
@@ -1460,6 +1469,25 @@ function Signup({ go, onAuth }) {
 
 function Recover({ go }) {
   const [sent, setSent] = useState(false);
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function submit() {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) return setErr("Informe seu e-mail.");
+    setErr("");
+    setBusy(true);
+    try {
+      await API.recover(cleanEmail);
+      setSent(true);
+    } catch (e) {
+      setErr(e.message || "Não foi possível enviar as instruções.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <AuthShell title="Recuperar senha" sub="Enviaremos instruções para seu e-mail.">
       {sent ? (
@@ -1472,13 +1500,73 @@ function Recover({ go }) {
         </div>
       ) : (
         <>
+          {err && <div style={{ background: "#FFF0F0", color: C.danger, padding: "11px 14px",
+            borderRadius: 11, fontSize: 13.5, marginBottom: 16, fontWeight: 600 }}>{err}</div>}
           <Field label="E-mail da conta">
-            <Input type="email" placeholder="voce@email.com" />
+            <Input type="email" placeholder="voce@email.com" value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submit()} />
           </Field>
-          <Btn kind="ai" style={{ width: "100%" }} onClick={() => setSent(true)}>Enviar instruções</Btn>
+          <Btn kind="ai" style={{ width: "100%" }} onClick={submit} disabled={busy}>
+            {busy ? <Spinner /> : "Enviar instruções"}
+          </Btn>
           <p style={{ textAlign: "center", marginTop: 24, color: C.mute, fontSize: 14 }}>
             <a onClick={() => go("login")} style={{ color: C.ai, fontWeight: 700, cursor: "pointer" }}>← Voltar ao login</a>
           </p>
+        </>
+      )}
+    </AuthShell>
+  );
+}
+
+function ResetPassword({ token, go }) {
+  const [pass, setPass] = useState("");
+  const [pass2, setPass2] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function submit() {
+    setErr("");
+    if (pass.length < 6) return setErr("A senha precisa de pelo menos 6 caracteres.");
+    if (pass !== pass2) return setErr("As senhas não conferem.");
+    setBusy(true);
+    try {
+      await API.resetPassword(token, pass);
+      window.history.replaceState({}, "", window.location.pathname);
+      setDone(true);
+    } catch (e) {
+      setErr(e.message || "Não foi possível alterar a senha.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <AuthShell title="Criar nova senha" sub="Escolha uma nova senha segura para sua conta.">
+      {done ? (
+        <div style={{ background: "#E9F9F1", color: C.moneyDark, padding: 20, borderRadius: 13,
+          fontSize: 14.5, lineHeight: 1.6 }}>
+          ✓ Sua senha foi alterada com sucesso.
+          <div style={{ marginTop: 16 }}>
+            <Btn kind="ai" size="sm" onClick={() => go("login")}>Entrar com a nova senha</Btn>
+          </div>
+        </div>
+      ) : (
+        <>
+          {err && <div style={{ background: "#FFF0F0", color: C.danger, padding: "11px 14px",
+            borderRadius: 11, fontSize: 13.5, marginBottom: 16, fontWeight: 600 }}>{err}</div>}
+          <Field label="Nova senha">
+            <Input type="password" placeholder="••••••••" value={pass}
+              onChange={(e) => setPass(e.target.value)} />
+          </Field>
+          <Field label="Confirmar nova senha">
+            <Input type="password" placeholder="••••••••" value={pass2}
+              onChange={(e) => setPass2(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
+          </Field>
+          <Btn kind="ai" style={{ width: "100%" }} onClick={submit} disabled={busy}>
+            {busy ? <Spinner /> : "Salvar nova senha"}
+          </Btn>
         </>
       )}
     </AuthShell>
@@ -3039,11 +3127,22 @@ export default function App() {
   const [editing, setEditing] = useState(null);   // proposal id em edição
   const [draft, setDraft] = useState(null);        // draft do wizard (duplicação)
   const [publicProp, setPublicProp] = useState(null);
+  const [resetToken, setResetToken] = useState(null);
   const [booting, setBooting] = useState(true);
 
   /* sessão persistida */
   useEffect(() => {
     (async () => {
+      // O Supabase devolve um token temporário após validar o link de recuperação.
+      const recoveryParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const recoveryToken = recoveryParams.get("access_token");
+      if (recoveryParams.get("type") === "recovery" && recoveryToken) {
+        setResetToken(recoveryToken);
+        setView("reset");
+        setBooting(false);
+        return;
+      }
+
       // Link público de proposta: fecheiia.com.br/p/CODIGO (sem login)
       const pubMatch = window.location.pathname.match(/^\/p\/([A-Za-z0-9]+)/);
       if (pubMatch && backendOn()) {
@@ -3314,6 +3413,8 @@ export default function App() {
     return <><GlobalStyle /><Signup go={go} onAuth={handleAuth} /></>;
   if (view === "recover")
     return <><GlobalStyle /><Recover go={go} /></>;
+  if (view === "reset")
+    return <><GlobalStyle /><ResetPassword token={resetToken} go={go} /></>;
   if (view === "privacy" || view === "terms")
     return <><GlobalStyle /><LegalPage kind={view} go={go} /></>;
   if (view === "public")
