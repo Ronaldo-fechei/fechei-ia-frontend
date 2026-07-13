@@ -55,11 +55,11 @@ const DB = {
        login seguro (JWT), propostas no banco (Supabase), IA com sua chave.
      • Se estiver vazio → usa o armazenamento local (demonstração/teste),
        para o app continuar funcionando aqui sem o backend no ar.
-   Para ativar produção: preencha BACKEND.url com a URL do Railway.
+   Para ativar produção: preencha BACKEND.url com a URL do servidor.
    ============================================================================ */
 const BACKEND = {
-  // Ex.: "https://fechei-ia.up.railway.app" — deixe "" para modo demo local.
-  url: "https://fechei-ia-beckend-production.up.railway.app",
+  // Ex.: "https://fechei-ia-backend.onrender.com" — deixe "" para modo demo local.
+  url: "https://fechei-ia-beckend.onrender.com",
 };
 const backendOn = () => !!BACKEND.url;
 
