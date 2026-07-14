@@ -830,6 +830,7 @@ function SavingsCalculator({ go }) {
    ============================================================================ */
 function Landing({ go }) {
   const [faq, setFaq] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const benefits = [
     { icon: "⚡", t: "Pronto em minutos", d: "Da informação solta à proposta completa em menos de 5 minutos." },
     { icon: "🤖", t: "Escrita por IA", d: "A IA transforma seu rascunho em texto profissional e persuasivo." },
@@ -854,7 +855,7 @@ function Landing({ go }) {
         alignItems: "center", justifyContent: "space-between",
       }}>
         <Logo />
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div className="pp-desktop-nav" style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <a href="#como-funciona" className="pp-navlink" style={{
             color: C.mute, fontWeight: 700, fontSize: 14.5, padding: "8px 12px",
             textDecoration: "none", cursor: "pointer",
@@ -863,11 +864,46 @@ function Landing({ go }) {
             color: C.mute, fontWeight: 700, fontSize: 14.5, padding: "8px 12px",
             textDecoration: "none", cursor: "pointer",
           }}>Planos</a>
+          <a href="/blog/" className="pp-navlink" style={{
+            color: C.mute, fontWeight: 700, fontSize: 14.5, padding: "8px 12px",
+            textDecoration: "none", cursor: "pointer",
+          }}>Blog</a>
           <button onClick={() => go("login")} className="pp-btn" style={{
             background: "none", color: C.ink, fontWeight: 700, fontSize: 14.5, padding: "8px 12px",
           }}>Entrar</button>
           <Btn kind="ai" size="sm" onClick={() => go("signup")}>Criar conta grátis</Btn>
         </div>
+        <button className="pp-btn pp-mobile-nav-btn" aria-label="Abrir menu"
+          aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)} style={{
+            display: "none", width: 42, height: 42, borderRadius: 11,
+            background: C.ink, color: "#fff", fontSize: 20, alignItems: "center",
+            justifyContent: "center", transform: "none",
+          }}>{menuOpen ? "×" : "☰"}</button>
+        {menuOpen && (
+          <div className="pp-mobile-nav-menu" style={{
+            position: "absolute", top: "100%", left: 0, right: 0, background: "#fff",
+            borderBottom: `1px solid ${C.line}`, padding: "14px 20px 18px",
+            boxShadow: "0 18px 30px rgba(11,31,58,.12)", display: "flex",
+            flexDirection: "column", gap: 6,
+          }}>
+            <a href="#como-funciona" onClick={() => setMenuOpen(false)} style={{
+              color: C.ink, fontWeight: 700, padding: "11px 8px", textDecoration: "none",
+            }}>Como funciona</a>
+            <a href="#planos" onClick={() => setMenuOpen(false)} style={{
+              color: C.ink, fontWeight: 700, padding: "11px 8px", textDecoration: "none",
+            }}>Planos</a>
+            <a href="/blog/" style={{
+              color: C.ink, fontWeight: 700, padding: "11px 8px", textDecoration: "none",
+            }}>Blog</a>
+            <button className="pp-btn" onClick={() => { setMenuOpen(false); go("login"); }} style={{
+              background: C.paper, color: C.ink, fontWeight: 700, padding: "11px 12px",
+              borderRadius: 10, textAlign: "left", transform: "none",
+            }}>Entrar</button>
+            <Btn kind="ai" onClick={() => { setMenuOpen(false); go("signup"); }}>
+              Criar conta grátis
+            </Btn>
+          </div>
+        )}
       </nav>
 
       {/* HERO */}
@@ -1132,7 +1168,10 @@ function Landing({ go }) {
         .pp-navlink:hover { color: ${C.ink}; }
         @media (max-width: 880px){ .pp-hero-grid{ grid-template-columns:1fr !important; } }
         @media (max-width: 880px){ .pp-calc-grid{ grid-template-columns:1fr !important; } }
-        @media (max-width: 720px){ .pp-navlink{ display:none !important; } }
+        @media (max-width: 720px){
+          .pp-desktop-nav{ display:none !important; }
+          .pp-mobile-nav-btn{ display:flex !important; }
+        }
       `}</style>
     </div>
   );
