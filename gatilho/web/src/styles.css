@@ -1,0 +1,99 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@xyflow/react/dist/style.css";
+
+/* Identidade visual Gatilho: vermelho-coral ("disparo"), tinta escura e neutros frios. */
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --color-brand-50: #fff4f0;
+  --color-brand-100: #ffe5db;
+  --color-brand-200: #ffc8b5;
+  --color-brand-300: #ffa285;
+  --color-brand-400: #ff7a52;
+  --color-brand-500: #ef5a2f;
+  --color-brand-600: #cc3f17;
+  --color-brand-700: #a93312;
+  --color-brand-800: #862a13;
+  --color-brand-900: #6c2513;
+
+  --color-ink-950: #0f1115;
+  --color-ink-900: #171a21;
+  --color-ink-800: #232733;
+
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.125rem;
+
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.06);
+  --shadow-pop: 0 10px 30px -10px rgb(16 24 40 / 0.25), 0 4px 10px -6px rgb(16 24 40 / 0.12);
+
+  --animate-fade-in: fade-in 0.15s ease-out;
+  --animate-slide-in: slide-in 0.2s ease-out;
+  --animate-slide-up: slide-up 0.2s ease-out;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes slide-up {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-zinc-50 text-zinc-900 antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-500;
+  }
+  ::selection {
+    @apply bg-brand-100;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-zinc-200/80 bg-white shadow-card;
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+}
+
+/* Construtor visual (React Flow) */
+.react-flow__handle {
+  width: 12px;
+  height: 12px;
+  border: 2px solid white;
+}
+.react-flow__edge-path {
+  stroke-width: 2;
+}
+.react-flow__controls-button {
+  width: 28px;
+  height: 28px;
+}

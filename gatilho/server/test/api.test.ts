@@ -217,6 +217,11 @@ describe("stories, simulador, palavras-chave, dashboard e analytics", () => {
     const r = await api(s, "POST", "/api/automations", { name: "A4", mode: "quick", quick: { keywords: [{ text: "k4" }], message: "x" }, publish: true });
     expect(r.statusCode).toBe(402);
     expect(r.json().error.message).toContain("3 automações ativas");
+    // Criar e publicar é tudo ou nada: nenhum rascunho fica para trás.
+    expect((await api(s, "GET", "/api/automations")).json().automations).toHaveLength(3);
+    // Sem publicar, o rascunho pode ser salvo normalmente.
+    const draft = await api(s, "POST", "/api/automations", { name: "A4", mode: "quick", quick: { keywords: [{ text: "k4" }], message: "x" } });
+    expect(draft.statusCode).toBe(201);
   });
 
   it("callback oficial de exclusão de dados da Meta", async () => {

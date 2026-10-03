@@ -147,6 +147,8 @@ export async function createAutomation(workspaceId: string, userId: string, inpu
       flow = await resolveTagNames(workspaceId, flow, tx);
     }
     await assertFlowOwnership(workspaceId, flow, tx);
+    // "Criar e publicar" é tudo ou nada: valida antes de gravar para não deixar rascunhos duplicados.
+    if (input.publish) await assertPublishable(workspaceId, flow, null, tx);
     const [ws] = await tx.execute(sql`select default_cooldown_seconds from workspaces where id = ${workspaceId}`).then((r) => r.rows as { default_cooldown_seconds: number }[]);
     const [row] = await tx
       .insert(automations)
@@ -240,19 +242,24 @@ export async function updateAutomation(workspaceId: string, userId: string, id: 
   return updated;
 }
 
-export async function publishAutomation(workspaceId: string, userId: string, id: string): Promise<Automation> {
-  const automation = await getAutomationOrThrow(workspaceId, id);
-  const flow = parseFlow(automation.draftFlow);
+/** Verifica se um fluxo pode ser publicado (validação, recursos do plano e limite de automações ativas). */
+async function assertPublishable(workspaceId: string, flow: Flow, current: Automation | null, tx: DbOrTx = db): Promise<void> {
   const validation = validateFlow(flow);
   if (!validation.valid) {
     throw new AppError(422, "invalid_flow", validation.errors[0]?.message ?? "O fluxo tem erros.", { errors: validation.errors, warnings: validation.warnings });
   }
-  await assertFlowOwnership(workspaceId, flow);
-  const event = triggerEventOf(flow);
-  if (event === "comment" && !(await hasFeature(workspaceId, "comment_automations"))) {
+  if (triggerEventOf(flow) === "comment" && !(await hasFeature(workspaceId, "comment_automations", tx))) {
     throw new AppError(402, "limit_reached", "Seu plano não inclui automações de comentários.");
   }
-  if (automation.status !== "active") await assertLimit(workspaceId, "active_automations");
+  if (current?.status !== "active") await assertLimit(workspaceId, "active_automations", 1, tx);
+}
+
+export async function publishAutomation(workspaceId: string, userId: string, id: string): Promise<Automation> {
+  const automation = await getAutomationOrThrow(workspaceId, id);
+  const flow = parseFlow(automation.draftFlow);
+  await assertFlowOwnership(workspaceId, flow);
+  await assertPublishable(workspaceId, flow, automation);
+  const event = triggerEventOf(flow);
 
   const published = await db.transaction(async (tx) => {
     const [row] = await tx

@@ -8,7 +8,7 @@ import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import { ZodError } from "zod";
-import { env, isProd, isTest } from "./config/env";
+import { env, isTest } from "./config/env";
 import { AppError } from "./lib/errors";
 import { loggerOptions } from "./lib/logger";
 import authPlugin from "./plugins/auth";
@@ -77,9 +77,21 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   const dist = env.SERVE_WEB ? webDistDir() : null;
   if (dist) {
-    await app.register(fastifyStatic, { root: dist, prefix: "/", wildcard: false, maxAge: isProd ? "1h" : 0 });
+    await app.register(fastifyStatic, {
+      root: dist,
+      prefix: "/",
+      wildcard: true,
+      // Arquivos com hash no nome podem ser guardados em cache indefinidamente.
+      setHeaders: (res, path) => {
+        res.header("Cache-Control", path.includes("/assets/") ? "public, max-age=31536000, immutable" : "no-cache");
+      },
+    });
     app.setNotFoundHandler((req, reply) => {
-      if (req.method === "GET" && !req.url.startsWith("/api/")) return reply.type("text/html").sendFile("index.html", { maxAge: 0 });
+      const path = req.url.split("?")[0];
+      // Rotas do SPA recebem o index.html; arquivos inexistentes (ex.: /assets/x.js) recebem 404 de verdade.
+      if (req.method === "GET" && !path.startsWith("/api/") && !/\.[a-z0-9]+$/i.test(path)) {
+        return reply.type("text/html").header("Cache-Control", "no-cache").sendFile("index.html");
+      }
       return reply.code(404).send({ error: { code: "not_found", message: "Rota não encontrada." } });
     });
   } else {

@@ -44,7 +44,7 @@ export function quickToFlow(input: QuickAutomation): Flow {
   const nodes: FlowNode[] = [];
   const edges: FlowEdge[] = [];
   let y = 0;
-  const step = 150;
+  const step = 180;
   const add = (node: Omit<FlowNode, "position">, from?: { id: string; handle?: string }) => {
     nodes.push({ ...node, position: { x: 0, y } } as FlowNode);
     y += step;

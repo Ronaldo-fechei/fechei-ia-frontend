@@ -25,9 +25,11 @@ class FlowBuilder {
   edges: FlowEdge[] = [];
   private row = 0;
 
-  node<T extends NodeType>(id: string, type: T, data: Partial<NodeDataMap[T]>, column = 0): string {
-    this.nodes.push({ id, type, data: data as NodeDataMap[T], position: { x: column * 320, y: this.row * 150 } } as FlowNode);
-    this.row += 1;
+  /** Adiciona um bloco; sem `row`, ocupa a próxima linha da coluna principal. */
+  node<T extends NodeType>(id: string, type: T, data: Partial<NodeDataMap[T]>, column = 0, row?: number): string {
+    const y = row ?? this.row;
+    this.nodes.push({ id, type, data: data as NodeDataMap[T], position: { x: column * 300, y: y * 190 } } as FlowNode);
+    if (row === undefined) this.row += 1;
     return id;
   }
 
@@ -80,19 +82,19 @@ export const TEMPLATES: TemplateDefinition[] = [
     highlights: ["Um caminho por assunto", "Entrega, pagamento e prazo"],
     build: () => {
       const b = new FlowBuilder();
-      const t = b.node("trigger", "trigger", trigger("dm"));
-      const k1 = b.node("kw-entrega", "keyword", { keywords: kw("entrega", "entregam", "frete") }, 0);
+      const t = b.node("trigger", "trigger", trigger("dm"), 1, 0);
+      const k1 = b.node("kw-entrega", "keyword", { keywords: kw("entrega", "entregam", "frete") }, 0, 1);
       const m1 = b.node("msg-entrega", "message", {
         text: "Sim! A entrega depende da loja e da sua região. Você pode conferir as condições diretamente no link do produto. 🚚",
-      }, 0);
-      const k2 = b.node("kw-pagamento", "keyword", { keywords: kw("pagamento", "pix", "parcela", "cartão") }, 1);
+      }, 0, 2);
+      const k2 = b.node("kw-pagamento", "keyword", { keywords: kw("pagamento", "pix", "parcela", "cartão") }, 1, 1);
       const m2 = b.node("msg-pagamento", "message", {
         text: "Aceitamos Pix e cartão de crédito. As condições de parcelamento aparecem no checkout. 💳",
-      }, 1);
-      const k3 = b.node("kw-prazo", "keyword", { keywords: kw("prazo", "demora", "quando chega") }, 2);
+      }, 1, 2);
+      const k3 = b.node("kw-prazo", "keyword", { keywords: kw("prazo", "demora", "quando chega") }, 2, 1);
       const m3 = b.node("msg-prazo", "message", {
         text: "O prazo varia conforme o seu CEP e aparece antes de finalizar a compra. 📦",
-      }, 2);
+      }, 2, 2);
       b.link(t, k1).link(t, k2).link(t, k3).link(k1, m1).link(k2, m2).link(k3, m3);
       return b.flow();
     },
@@ -147,7 +149,7 @@ export const TEMPLATES: TemplateDefinition[] = [
     build: () => {
       const b = new FlowBuilder();
       const t = b.node("trigger", "trigger", trigger("dm"));
-      const k = b.node("keywords", "keyword", { keywords: kw("catálogo", "catalogo", "novidades") });
+      const k = b.node("keywords", "keyword", { keywords: kw("catálogo", "novidades") });
       const q = b.node("ask", "buttons", {
         text: "Quer receber o nosso catálogo? 📚",
         buttons: [
@@ -164,8 +166,8 @@ export const TEMPLATES: TemplateDefinition[] = [
       }, 0);
       const tag = b.node("tag", "add_tag", { tagId: "name:Lead" }, 0);
       const ok = b.node("thanks", "message", { text: "Obrigado! Em breve você recebe o catálogo no e-mail {{email}} 💌" }, 0);
-      const no = b.node("no", "message", { text: "Tudo bem! Se mudar de ideia, é só me chamar. 😉" }, 1);
-      const fail = b.node("fail", "handoff", { message: "Vou chamar alguém da equipe para te ajudar por aqui. 🙋" }, 1);
+      const no = b.node("no", "message", { text: "Tudo bem! Se mudar de ideia, é só me chamar. 😉" }, 1.2, 3);
+      const fail = b.node("fail", "handoff", { message: "Vou chamar alguém da equipe para te ajudar por aqui. 🙋" }, 1.2, 4);
       b.link(t, k).link(k, q).link(q, c, "btn:sim").link(q, no, "btn:nao").link(c, tag, "captured").link(c, fail, "failed").link(tag, ok);
       return b.flow();
     },
