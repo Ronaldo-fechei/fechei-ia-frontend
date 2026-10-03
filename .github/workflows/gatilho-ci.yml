@@ -58,7 +58,7 @@ jobs:
           PORT: "3333"
           APP_URL: http://localhost:3333
           DATABASE_URL: postgres://gatilho:gatilho@localhost:5432/gatilho_e2e
-          LOG_LEVEL: warn
+          LOG_LEVEL: info
         run: |
           psql -h localhost -U gatilho -d gatilho_test -c "CREATE DATABASE gatilho_e2e"
           nohup node server/dist/index.js > server.log 2>&1 &
@@ -73,9 +73,11 @@ jobs:
         env:
           CI: "true"
           E2E_BASE_URL: http://localhost:3333
-      - name: Log do servidor
+      - name: Diagnóstico dos testes e2e
         if: failure()
-        run: cat server.log || true
+        run: |
+          find web/test-results -name error-context.md -exec sh -c 'echo "=== $1"; cat "$1"' _ {} \; || true
+          echo "=== server.log"; tail -n 200 server.log || true
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

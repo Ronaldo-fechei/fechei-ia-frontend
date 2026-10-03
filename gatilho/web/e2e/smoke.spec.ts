@@ -49,7 +49,10 @@ test("cadastro → automação rascunho → simulador → sair e entrar de novo"
   // O simulador roda o mesmo motor de produção, sem enviar nada ao Instagram.
   const input = page.getByLabel("Mensagem de teste");
   await input.fill("me manda o LINK por favor");
+  const simulated = page.waitForResponse((r) => r.url().endsWith("/test") && r.request().method() === "POST");
   await input.press("Enter");
+  const response = await simulated;
+  expect(response.status(), await response.text()).toBe(200);
   await expect(page.getByText("Palavra detectada: LINK")).toBeVisible();
   await expect(page.getByText("Fluxo concluído.")).toBeVisible();
 
