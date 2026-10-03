@@ -334,6 +334,9 @@ async function handleMessaging(account: Account, item: IgMessagingItem): Promise
     if (contactCreated) {
       await track(account.workspaceId, "contacts_new", { at }, tx);
       await enqueue("contact.fetch_profile", { contactId: contact.id }, { dedupeKey: `profile:${contact.id}` }, tx);
+    } else if (!contact.profileFetchedAt || Date.now() - contact.profileFetchedAt.getTime() > 3 * 86400_000) {
+      // Nome e foto podem mudar (e as URLs de foto do Instagram expiram): atualiza a cada poucos dias.
+      await enqueue("contact.fetch_profile", { contactId: contact.id }, { dedupeKey: `profile:${contact.id}:${at.toISOString().slice(0, 10)}` }, tx);
     }
     if (convCreated) await track(account.workspaceId, "conversations_new", { at }, tx);
 

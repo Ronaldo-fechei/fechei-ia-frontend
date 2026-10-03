@@ -151,6 +151,40 @@ describe("motor de automação", () => {
     expect(graph.sends()).toHaveLength(1);
   });
 
+  it("editar mantém a versão publicada até publicar de novo; excluir interrompe fluxos em andamento", async () => {
+    const a = await createQuick("Cupom", ["cupom"], "Cupom: OLA10");
+    const edited = await api(s, "PATCH", `/api/automations/${a.id}`, { quick: { keywords: [{ text: "cupom" }], message: "Cupom: VOLTA15" } });
+    expect(edited.statusCode, edited.body).toBe(200);
+    expect(edited.json().automation.hasUnpublishedChanges).toBe(true);
+
+    await postWebhook(dmPayload(account.igUserId, "E1", "tem cupom?"));
+    await drain();
+    expect(graph.sends().at(-1)!.body.message.text).toBe("Cupom: OLA10");
+
+    await api(s, "POST", `/api/automations/${a.id}/publish`);
+    await postWebhook(dmPayload(account.igUserId, "E2", "tem cupom?"));
+    await drain();
+    expect(graph.sends().at(-1)!.body.message.text).toBe("Cupom: VOLTA15");
+
+    // Uma execução aguardando um bloco "Aguardar" não envia nada depois da exclusão.
+    const delayed = await createQuick("Brinde", ["brinde"], "Seu brinde chegou", { delaySeconds: 60 });
+    await postWebhook(dmPayload(account.igUserId, "E3", "quero o brinde"));
+    await drain();
+    const sendsBefore = graph.sends().length;
+    const [waiting] = await db.select().from(automationExecutions).where(eq(automationExecutions.automationId, delayed.id));
+    expect(waiting.status).toBe("waiting");
+
+    expect((await api(s, "DELETE", `/api/automations/${delayed.id}`)).statusCode).toBe(200);
+    expect((await api(s, "GET", `/api/automations/${delayed.id}`)).statusCode).toBe(404);
+    await fastForwardJobs();
+    await drain();
+    expect(graph.sends()).toHaveLength(sendsBefore);
+    const [after] = await db.select().from(automationExecutions).where(eq(automationExecutions.id, waiting.id));
+    expect(after.status).toBe("cancelled");
+    expect(after.automationId).toBeNull(); // o histórico continua nos logs
+    expect(after.automationName).toBe("Brinde");
+  });
+
   it("aguardar + botões + captura de e-mail + condição por tag", async () => {
     const tags = (await api(s, "GET", "/api/tags")).json().tags as { id: string; name: string }[];
     const lead = tags.find((t) => t.name === "Lead")!;

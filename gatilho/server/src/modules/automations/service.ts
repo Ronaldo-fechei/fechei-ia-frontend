@@ -337,7 +337,14 @@ export async function duplicateAutomation(workspaceId: string, userId: string, i
 
 export async function deleteAutomation(workspaceId: string, userId: string, id: string): Promise<void> {
   const automation = await getAutomationOrThrow(workspaceId, id);
-  await db.delete(automations).where(eq(automations.id, id));
+  await db.transaction(async (tx) => {
+    // O histórico fica nos logs; fluxos em andamento não continuam.
+    await tx
+      .update(automationExecutions)
+      .set({ status: "cancelled", skipReason: "automation_inactive", finishedAt: new Date(), waitType: null })
+      .where(and(eq(automationExecutions.automationId, id), inArray(automationExecutions.status, ["running", "waiting"])));
+    await tx.delete(automations).where(eq(automations.id, id));
+  });
   await audit({ workspaceId, userId, action: "automation.deleted", entityType: "automation", entityId: id, metadata: { name: automation.name } });
 }
 

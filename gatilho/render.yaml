@@ -1,0 +1,61 @@
+# Blueprint do Render — https://render.com/docs/blueprint-spec
+# Como este app fica na pasta gatilho/ do repositório, ao criar o Blueprint no painel
+# do Render informe o caminho do arquivo: gatilho/render.yaml
+#
+# Cria: 1 serviço web (API + painel + worker da fila no mesmo processo) e 1 PostgreSQL.
+# Use um plano pago (não "free"): instâncias gratuitas hibernam, o que atrasa webhooks
+# da Meta e pausa os envios agendados (blocos "Aguardar").
+services:
+  - type: web
+    name: gatilho
+    runtime: docker
+    plan: starter
+    dockerContext: ./gatilho
+    dockerfilePath: ./gatilho/Dockerfile
+    buildFilter:
+      paths:
+        - gatilho/**
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: RUN_WORKER
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: gatilho-db
+          property: connectionString
+      - key: APP_SECRET
+        generateValue: true
+      # Valores pedidos na criação do Blueprint (não ficam no repositório):
+      - key: APP_URL # ex.: https://app.seudominio.com.br (sem barra no final)
+        sync: false
+      - key: ENCRYPTION_KEY # gere com: openssl rand -base64 32 — guarde uma cópia; trocar invalida as conexões
+        sync: false
+      - key: INSTAGRAM_APP_ID
+        sync: false
+      - key: INSTAGRAM_APP_SECRET
+        sync: false
+      - key: META_WEBHOOK_VERIFY_TOKEN
+        sync: false
+      - key: SUPPORT_EMAIL
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: ANTHROPIC_API_KEY # opcional (recursos de IA)
+        sync: false
+
+databases:
+  - name: gatilho-db
+    databaseName: gatilho
+    user: gatilho
+    plan: basic-256mb
+    postgresMajorVersion: "16"

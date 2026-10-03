@@ -3,7 +3,14 @@
  * Integrações externas são opcionais: quando ausentes, o painel mostra
  * exatamente o que precisa ser configurado (veja /api/system/status).
  */
+import { existsSync } from "node:fs";
 import { z } from "zod";
+
+// Desenvolvimento: lê server/.env (ou gatilho/.env). Variáveis já definidas no ambiente têm prioridade.
+if (process.env.NODE_ENV !== "test") {
+  const file = [".env", "../.env"].find((f) => existsSync(f));
+  if (file) process.loadEnvFile(file);
+}
 
 const bool = (def: boolean) =>
   z
@@ -79,7 +86,7 @@ function load(): Env {
   if (env.NODE_ENV === "production") {
     const missing: string[] = [];
     if (env.APP_SECRET.length < 32) missing.push("APP_SECRET (mínimo 32 caracteres)");
-    if (!env.ENCRYPTION_KEY) missing.push("ENCRYPTION_KEY");
+    if (Buffer.from(env.ENCRYPTION_KEY, "base64").length !== 32) missing.push("ENCRYPTION_KEY (32 bytes em base64: openssl rand -base64 32)");
     if (!env.APP_URL.startsWith("https://")) missing.push("APP_URL com https://");
     if (missing.length) throw new Error(`Variáveis obrigatórias em produção ausentes: ${missing.join(", ")}`);
   }

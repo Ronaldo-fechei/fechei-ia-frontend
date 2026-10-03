@@ -21,6 +21,6 @@
     "lint": "npm run typecheck"
   },
   "engines": {
-    "node": ">=20.11"
+    "node": ">=20.12"
   }
 }
