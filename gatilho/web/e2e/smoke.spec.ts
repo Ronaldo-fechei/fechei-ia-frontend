@@ -1,6 +1,19 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const PASSWORD = "SenhaForte#2026";
+
+// Erros do navegador aparecem no relatório quando um teste falha.
+const browserErrors = new WeakMap<Page, string[]>();
+test.beforeEach(({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(`[pageerror] ${e.message}\n${e.stack ?? ""}`));
+  page.on("console", (m) => m.type() === "error" && errors.push(`[console] ${m.text()}`));
+  browserErrors.set(page, errors);
+});
+test.afterEach(({ page }, info) => {
+  const errors = browserErrors.get(page) ?? [];
+  if (info.status !== info.expectedStatus && errors.length) console.log(`Erros do navegador:\n${errors.join("\n")}`);
+});
 const uniqueEmail = () => `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@exemplo.com.br`;
 
 async function signup(page: Page, email: string) {
