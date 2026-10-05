@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  CalendarClock,
   ChartColumn,
   Contact,
   KeyRound,
@@ -11,19 +12,26 @@ import {
   Workflow,
   Zap,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { APP_NAME, APP_TAGLINE } from "@veloxia/shared";
-import { Logo } from "../../components/brand/Logo";
+import { APP_NAME, APP_SLOGAN, APP_TAGLINE, type BillingCycle } from "@veloxia/shared";
+import { CycleToggle, PlanCards } from "../../components/billing/PlanCards";
+import { InstagramGlyph, Logo, WhatsAppGlyph } from "../../components/brand/Logo";
 import { ButtonLink } from "../../components/ui";
 import { useAuth } from "../../hooks/useAuth";
+import { api } from "../../lib/api";
+import type { PublicPlan } from "../../lib/types";
 
 const FEATURES: { icon: ReactNode; title: string; text: string }[] = [
-  { icon: <KeyRound />, title: "Direct por palavra-chave", text: "Alguém escreve “link”, “quero” ou “preço”? A resposta certa sai na hora, com botão para o seu link." },
+  { icon: <KeyRound />, title: "Respostas por palavra-chave", text: "Alguém escreve “link”, “quero” ou “preço” no Direct ou no WhatsApp? A resposta certa sai na hora, com botão para o seu link." },
+  { icon: <WhatsAppGlyph />, title: "WhatsApp oficial", text: "Conecte o número da empresa pela API oficial da Meta, com menus de botões, listas e modelos aprovados." },
+  { icon: <ArrowRight />, title: "Instagram → WhatsApp", text: "Leve quem chegou pelo Instagram para continuar a conversa no seu WhatsApp, com um toque." },
+  { icon: <CalendarClock />, title: "Sequências", text: "Lembretes e retomadas nos dias seguintes pelo WhatsApp, com modelos aprovados pela Meta." },
   { icon: <MessageCircle />, title: "Comentário → Direct", text: "“Comente LINK para receber”: quem comentar recebe o link no Direct pela resposta privada oficial." },
   { icon: <Zap />, title: "Respostas a Stories", text: "Responda automaticamente quem reagir aos seus Stories ou mencionar sua conta." },
   { icon: <Workflow />, title: "Construtor visual", text: "Monte fluxos com mensagens, botões, esperas, condições, tags e captura de e-mail — sem programar." },
-  { icon: <MessagesSquare />, title: "Caixa de entrada", text: "Veja todas as conversas, assuma o atendimento quando quiser e retome a automação com um clique." },
+  { icon: <MessagesSquare />, title: "Caixa de entrada única", text: "Instagram e WhatsApp no mesmo lugar: assuma o atendimento quando quiser e retome a automação com um clique." },
   { icon: <Contact />, title: "Contatos e tags", text: "Um CRM simples com histórico, tags, campos personalizados e exportação." },
   { icon: <ChartColumn />, title: "Métricas reais", text: "Mensagens, cliques nos links, palavras mais pedidas, horários de pico e desempenho por automação." },
   { icon: <Sparkles />, title: "IA que ajuda a criar", text: "Descreva o que você quer e receba uma automação pronta para revisar e publicar." },
@@ -63,6 +71,41 @@ function ChatPreview() {
   );
 }
 
+function Pricing({ loggedIn }: { loggedIn: boolean }) {
+  const [cycle, setCycle] = useState<BillingCycle>("monthly");
+  const { data } = useQuery({ queryKey: ["public-plans"], queryFn: () => api.get<{ plans: PublicPlan[] }>("/plans"), staleTime: 10 * 60_000 });
+  if (!data?.plans.length) return null;
+  return (
+    <section id="precos" className="bg-zinc-50 py-20">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <h2 className="text-center text-3xl font-semibold tracking-tight">Planos simples, em reais</h2>
+        <p className="mx-auto mt-3 max-w-2xl text-center text-zinc-500">
+          Comece grátis. Pague pelo Mercado Pago com cartão, PIX ou boleto. As mensagens do WhatsApp são cobradas pela Meta, direto na sua conta.
+        </p>
+        <div className="mt-8 flex justify-center">
+          <CycleToggle value={cycle} onChange={setCycle} />
+        </div>
+        <div className="mt-8">
+          <PlanCards
+            plans={data.plans}
+            cycle={cycle}
+            promoEligible
+            action={(p) => (
+              <ButtonLink to={loggedIn ? "/app/configuracoes?aba=plano" : "/cadastro"} variant={p.highlighted ? "primary" : "secondary"} className="w-full">
+                {p.priceCents > 0 ? `Escolher ${p.name}` : "Começar grátis"}
+              </ButtonLink>
+            )}
+          />
+        </div>
+        <p className="mt-6 text-center text-xs text-zinc-500">
+          Contato ativo = pessoa que mandou mensagem para você no mês. Respostas do WhatsApp em até 24h após a mensagem do cliente não são cobradas pela
+          Meta; mensagens de modelo (marketing e utilidade) são cobradas pela Meta por mensagem.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 export default function Landing() {
   const { me } = useAuth();
   return (
@@ -76,6 +119,9 @@ export default function Landing() {
             </a>
             <a href="#recursos" className="hidden px-2 text-sm text-zinc-300 hover:text-white md:block">
               Recursos
+            </a>
+            <a href="#precos" className="hidden px-2 text-sm text-zinc-300 hover:text-white md:block">
+              Preços
             </a>
             {me ? (
               <ButtonLink to="/app" size="sm">
@@ -102,10 +148,11 @@ export default function Landing() {
             <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-zinc-300">
               <ShieldCheck className="size-3.5 text-emerald-400" /> 100% API oficial da Meta
             </span>
-            <h1 className="mt-5 text-4xl leading-[1.1] font-semibold tracking-tight sm:text-5xl">{APP_TAGLINE}</h1>
+            <p className="mt-5 text-sm font-medium tracking-wide text-brand-300 uppercase">{APP_SLOGAN}</p>
+            <h1 className="mt-2 text-4xl leading-[1.1] font-semibold tracking-tight sm:text-5xl">{APP_TAGLINE}</h1>
             <p className="mt-5 max-w-xl text-lg text-zinc-300">
-              Alguém comentou “LINK” ou pediu “onde comprar?” no Direct? O {APP_NAME} responde na hora com a mensagem e o link certos — enquanto você
-              cuida do que importa.
+              Alguém comentou “LINK” no Instagram ou perguntou o preço no WhatsApp? O {APP_NAME} responde na hora com a mensagem e o link certos —
+              enquanto você cuida do que importa.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <ButtonLink to={me ? "/app" : "/cadastro"} size="lg" icon={<ArrowRight className="size-5" />} className="flex-row-reverse">
@@ -115,7 +162,15 @@ export default function Landing() {
                 Ver como funciona
               </a>
             </div>
-            <p className="mt-4 text-sm text-zinc-400">Sem cartão de crédito. Sem senha do Instagram.</p>
+            <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-400">
+              <span className="inline-flex items-center gap-1.5">
+                <InstagramGlyph className="size-4" /> Instagram
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <WhatsAppGlyph className="size-4" /> WhatsApp
+              </span>
+              <span>· Sem cartão de crédito. Nunca pedimos sua senha.</span>
+            </p>
           </div>
           <ChatPreview />
         </div>
@@ -126,10 +181,10 @@ export default function Landing() {
         <p className="mx-auto mt-3 max-w-2xl text-center text-zinc-500">Não precisa saber programar. É só seguir os passos.</p>
         <ol className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { n: 1, t: "Conecte o Instagram", d: "Login oficial do Instagram, em uma conta profissional. Nunca pedimos sua senha." },
+            { n: 1, t: "Conecte seus canais", d: "Instagram profissional e/ou WhatsApp da empresa, pelo login oficial da Meta. Nunca pedimos senha." },
             { n: 2, t: "Escolha as palavras", d: "“link”, “quero”, “preço”… Você decide o que ativa cada resposta." },
             { n: 3, t: "Escreva a resposta", d: "Texto com emojis, nome da pessoa e botão para o seu link." },
-            { n: 4, t: "Publique", d: "Pronto: cada mensagem com a palavra-chave recebe a resposta automática." },
+            { n: 4, t: "Publique", d: "Pronto: cada mensagem com a palavra-chave recebe a resposta automática, em todos os canais escolhidos." },
           ].map((s) => (
             <li key={s.n} className="card p-6">
               <span className="flex size-9 items-center justify-center rounded-full bg-brand-600 text-sm font-bold text-white">{s.n}</span>
@@ -142,7 +197,7 @@ export default function Landing() {
 
       <section id="recursos" className="bg-zinc-50 py-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <h2 className="text-center text-3xl font-semibold tracking-tight">Tudo o que você precisa para vender pelo Direct</h2>
+          <h2 className="text-center text-3xl font-semibold tracking-tight">Tudo o que você precisa para atender e vender por mensagem</h2>
           <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {FEATURES.map((f) => (
               <div key={f.title} className="card p-6">
@@ -158,7 +213,7 @@ export default function Landing() {
       <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
         <div className="grid items-center gap-10 lg:grid-cols-2">
           <div>
-            <h2 className="text-3xl font-semibold tracking-tight">Feito para quem vende e cria no Instagram</h2>
+            <h2 className="text-3xl font-semibold tracking-tight">Feito para quem vende pelo Instagram e pelo WhatsApp</h2>
             <div className="mt-6 flex flex-wrap gap-2">
               {AUDIENCE.map((a) => (
                 <span key={a} className="rounded-full border border-zinc-200 px-3 py-1.5 text-sm text-zinc-700">
@@ -189,6 +244,8 @@ export default function Landing() {
         </div>
       </section>
 
+      <Pricing loggedIn={!!me} />
+
       <section className="bg-ink-950 py-16 text-center text-white">
         <h2 className="text-3xl font-semibold tracking-tight">Comece agora — é grátis</h2>
         <p className="mt-3 text-zinc-400">Crie sua conta e publique sua primeira automação hoje.</p>
@@ -211,7 +268,7 @@ export default function Landing() {
               Exclusão de dados
             </Link>
           </div>
-          <p className="text-xs">Instagram é uma marca da Meta Platforms, Inc. O {APP_NAME} não é afiliado à Meta.</p>
+          <p className="text-xs">Instagram e WhatsApp são marcas da Meta Platforms, Inc. O {APP_NAME} não é afiliado à Meta.</p>
         </div>
       </footer>
     </div>

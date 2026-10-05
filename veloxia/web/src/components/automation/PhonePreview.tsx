@@ -1,5 +1,6 @@
 import { renderVariables, SYSTEM_VARIABLES } from "@veloxia/shared";
-import { BatteryFull, Camera, ChevronLeft, Image, Mic, Phone, Signal, Sticker, Video, Wifi } from "lucide-react";
+import { BatteryFull, Camera, ChevronLeft, Image, Mic, Paperclip, Phone, Signal, Smile, Sticker, Video, Wifi } from "lucide-react";
+import type { Channel } from "@veloxia/shared";
 import type { ReactNode } from "react";
 import type { SimOutput } from "../../lib/types";
 import { Bubble, OutboundContentView } from "./Bubbles";
@@ -26,7 +27,7 @@ function StoryAvatar({ label, size }: { label: string; size: "sm" | "lg" }) {
 }
 
 /**
- * Pré-visualização do que o seguidor vê no Direct do Instagram, dentro de um celular.
+ * Pré-visualização do que o contato vê (Direct do Instagram ou WhatsApp), dentro de um celular.
  * Ilustrativa: o layout real depende do aparelho e da versão do app.
  */
 export function PhonePreview({
@@ -34,12 +35,15 @@ export function PhonePreview({
   outputs,
   footer,
   accountName = "sua_conta",
+  channel = "instagram",
 }: {
   incoming?: string;
   outputs: SimOutput["content"][];
   footer?: ReactNode;
   accountName?: string;
+  channel?: Channel;
 }) {
+  if (channel === "whatsapp") return <WhatsAppPreview incoming={incoming} outputs={outputs} footer={footer} accountName={accountName} />;
   const initials = accountName.replace(/[^a-z0-9]/gi, "").slice(0, 2).toUpperCase() || "SC";
   return (
     <figure className="mx-auto w-full max-w-[300px]">
@@ -111,6 +115,72 @@ export function PhonePreview({
         </div>
       </div>
       <figcaption className="mt-2.5 text-center text-[11px] text-zinc-500">{footer ?? "Prévia ilustrativa de como o seguidor recebe a resposta."}</figcaption>
+    </figure>
+  );
+}
+
+/** Variação com a aparência de uma conversa de WhatsApp (ilustrativa, sem a marca). */
+function WhatsAppPreview({ incoming, outputs, footer, accountName }: { incoming?: string; outputs: SimOutput["content"][]; footer?: ReactNode; accountName: string }) {
+  const name = accountName === "sua_conta" ? "Sua empresa" : accountName;
+  return (
+    <figure className="mx-auto w-full max-w-[300px]">
+      <div className="relative rounded-[2.75rem] bg-ink-900 p-[9px] shadow-pop ring-1 ring-black/10">
+        <span aria-hidden className="absolute top-24 -left-[3px] h-8 w-[3px] rounded-l bg-ink-800" />
+        <span aria-hidden className="absolute top-36 -left-[3px] h-12 w-[3px] rounded-l bg-ink-800" />
+        <span aria-hidden className="absolute top-32 -right-[3px] h-16 w-[3px] rounded-r bg-ink-800" />
+        <div className="relative flex aspect-[9/19] flex-col overflow-hidden rounded-[2.2rem] bg-[#efe7dd] text-zinc-900">
+          <div className="relative flex h-9 shrink-0 items-center justify-between bg-white px-6 pt-1 text-[11px] font-semibold">
+            <span>9:41</span>
+            <span aria-hidden className="absolute top-2 left-1/2 h-[22px] w-[84px] -translate-x-1/2 rounded-full bg-ink-900" />
+            <span className="flex items-center gap-1" aria-hidden>
+              <Signal className="size-3" strokeWidth={2.5} />
+              <Wifi className="size-3" strokeWidth={2.5} />
+              <BatteryFull className="size-4" strokeWidth={2} />
+            </span>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 border-b border-zinc-200 bg-white px-2.5 py-2">
+            <ChevronLeft className="size-5 text-emerald-700" aria-hidden />
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-800">
+              {name.replace(/[^a-z0-9]/gi, "").slice(0, 2).toUpperCase() || "SE"}
+            </span>
+            <div className="min-w-0 flex-1 leading-tight">
+              <p className="truncate text-[12px] font-semibold">{name}</p>
+              <p className="text-[10px] text-zinc-500">Conta comercial</p>
+            </div>
+            <Video className="size-5 text-emerald-700" aria-hidden />
+            <Phone className="ml-2 size-[18px] text-emerald-700" aria-hidden />
+          </div>
+          <div className="scrollbar-thin flex-1 space-y-2 overflow-y-auto px-2.5 py-3 text-[13px]">
+            <p className="mx-auto w-fit rounded-md bg-white/80 px-2 py-0.5 text-center text-[10px] font-medium text-zinc-500">Hoje</p>
+            {incoming && (
+              <Bubble side="right" className="rounded-lg bg-[#d9fdd3] text-zinc-900">
+                {incoming}
+              </Bubble>
+            )}
+            {outputs.length > 0 && (
+              <div className="space-y-1.5 [&_.rounded-2xl]:rounded-lg">
+                {outputs.map((c, i) => (
+                  <OutboundContentView key={i} content={c} side="left" />
+                ))}
+              </div>
+            )}
+            {!incoming && outputs.length === 0 && <p className="pt-10 text-center text-[11px] text-zinc-500">A resposta aparece aqui enquanto você escreve.</p>}
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5 px-2 pb-1.5" aria-hidden>
+            <div className="flex flex-1 items-center gap-2 rounded-full bg-white py-1.5 pr-3 pl-2.5">
+              <Smile className="size-4 text-zinc-500" />
+              <span className="flex-1 text-[12px] text-zinc-400">Mensagem</span>
+              <Paperclip className="size-4 text-zinc-500" />
+              <Camera className="size-4 text-zinc-500" />
+            </div>
+            <span className="flex size-8 items-center justify-center rounded-full bg-emerald-600 text-white">
+              <Mic className="size-4" />
+            </span>
+          </div>
+          <span aria-hidden className="mx-auto mb-1.5 h-1 w-24 shrink-0 rounded-full bg-zinc-900" />
+        </div>
+      </div>
+      <figcaption className="mt-2.5 text-center text-[11px] text-zinc-500">{footer ?? "Prévia ilustrativa de como o cliente recebe a resposta no WhatsApp."}</figcaption>
     </figure>
   );
 }

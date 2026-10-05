@@ -102,5 +102,15 @@ export function OutboundContentView({
           </div>
         </div>
       );
+    case "template":
+      return (
+        <div className={cn("flex", justify)}>
+          <div className="w-64 max-w-[85%] overflow-hidden rounded-2xl bg-emerald-50 ring-1 ring-emerald-200">
+            {content.headerImageUrl && <img src={content.headerImageUrl} alt="" className="max-h-32 w-full object-cover" />}
+            <p className="px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap text-zinc-900">{content.previewText}</p>
+            <p className="border-t border-emerald-200 px-3.5 py-1.5 text-[11px] text-emerald-800">Modelo do WhatsApp · {content.name}</p>
+          </div>
+        </div>
+      );
   }
 }

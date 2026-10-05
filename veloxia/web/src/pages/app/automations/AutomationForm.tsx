@@ -2,7 +2,8 @@ import { ArrowLeft, Clock, MessageCircle, MessagesSquare, Radio, Rocket, Save, U
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { COOLDOWN_PRESETS, DELAY_PRESETS, TRIGGER_EVENT_INFO, type MatchType, type TriggerEvent } from "@veloxia/shared";
+import { CHANNEL_INFO, COOLDOWN_PRESETS, DELAY_PRESETS, TRIGGER_EVENT_INFO, type Channel, type MatchType, type TriggerEvent } from "@veloxia/shared";
+import { ChannelGlyph } from "../../../components/brand/Logo";
 import { KeywordEditor, type KeywordValue } from "../../../components/automation/KeywordEditor";
 import { ImageField } from "../../../components/automation/ImageField";
 import { MediaPicker } from "../../../components/automation/MediaPicker";
@@ -10,8 +11,8 @@ import { MessageEditor } from "../../../components/automation/MessageEditor";
 import { PhonePreview, previewText } from "../../../components/automation/PhonePreview";
 import { Simulator } from "../../../components/automation/Simulator";
 import { StatusBadge } from "../../../components/automation/badges";
-import { useInstagramAccounts } from "../../../components/layout/AppLayout";
-import { Button, ButtonLink, Callout, Card, CardTitle, Field, Input, PageHeader, Select, Skeleton, Switch } from "../../../components/ui";
+import { useChannelAccounts } from "../../../hooks/useChannels";
+import { Button, ButtonLink, Callout, Card, CardTitle, Field, Input, PageHeader, Segmented, Select, Skeleton, Switch } from "../../../components/ui";
 import { useAutomation, useAutomationActions } from "../../../hooks/useAutomations";
 import { api, ApiError, errorMessage } from "../../../lib/api";
 import { cn } from "../../../lib/cn";
@@ -22,6 +23,7 @@ type QuickEvent = "dm" | "comment" | "story_reply" | "story_mention";
 interface FormState {
   name: string;
   triggerEvent: QuickEvent;
+  channels: Channel[];
   keywords: KeywordValue[];
   message: string;
   linkUrl: string;
@@ -39,6 +41,7 @@ interface FormState {
 const EMPTY: FormState = {
   name: "",
   triggerEvent: "dm",
+  channels: ["instagram"],
   keywords: [],
   message: "",
   linkUrl: "",
@@ -67,6 +70,7 @@ function fromAutomation(a: AutomationFull): FormState {
     ...EMPTY,
     name: a.name,
     triggerEvent: (q.triggerEvent ?? a.triggerEvent) as QuickEvent,
+    channels: (q.channels ?? a.channels ?? ["instagram"]) as Channel[],
     keywords: (q.keywords ?? []).map((k: any) => ({ text: k.text, matchType: k.matchType ?? "contains_word", caseSensitive: !!k.caseSensitive, ignoreAccents: k.ignoreAccents !== false })),
     message: q.message ?? "",
     linkUrl: q.linkUrl ?? "",
@@ -119,7 +123,8 @@ export default function AutomationForm() {
   const editing = !!id;
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const account = useInstagramAccounts().data?.accounts[0];
+  const { instagram, whatsapp, data: channelData } = useChannelAccounts();
+  const [previewChannel, setPreviewChannel] = useState<Channel>("instagram");
   const { data, isLoading } = useAutomation(id);
   const { invalidate } = useAutomationActions();
   const automation = data?.automation;
@@ -130,6 +135,8 @@ export default function AutomationForm() {
     const trigger = params.get("gatilho") as QuickEvent | null;
     if (trigger && ["dm", "comment", "story_reply", "story_mention"].includes(trigger)) initial.triggerEvent = trigger;
     if (initial.triggerEvent === "comment") initial.publicReplyEnabled = true;
+    const canal = params.get("canal");
+    if (canal === "whatsapp") initial.channels = ["whatsapp"];
     if (params.get("origem") === "ia") Object.assign(initial, readAiDraft() ?? {});
     return initial;
   });
@@ -140,6 +147,14 @@ export default function AutomationForm() {
   useEffect(() => {
     if (automation && automation.mode === "quick") setForm(fromAutomation(automation));
   }, [automation]);
+  // Nova automação: se só o WhatsApp estiver conectado, já começa por ele.
+  useEffect(() => {
+    if (!editing && channelData && !instagram.length && whatsapp.length && !params.get("canal")) setForm((f) => ({ ...f, channels: ["whatsapp"] }));
+  }, [editing, channelData, instagram.length, whatsapp.length, params]);
+
+  const channels: Channel[] = form.triggerEvent === "dm" ? form.channels : ["instagram"];
+  const shownChannel: Channel = channels.includes(previewChannel) ? previewChannel : channels[0];
+  const onlyWhatsApp = channels.length === 1 && channels[0] === "whatsapp";
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }));
   const isComment = form.triggerEvent === "comment";
@@ -178,6 +193,7 @@ export default function AutomationForm() {
     setSaving(publish ? "publish" : "draft");
     const quick = {
       triggerEvent: form.triggerEvent,
+      channels,
       keywords: isMention ? [] : form.keywords,
       message: form.message,
       linkUrl: form.linkUrl.trim(),
@@ -235,9 +251,37 @@ export default function AutomationForm() {
             </Field>
           </Section>
 
-          <Section step={2} title="Quando responder?" description="Escolha o que ativa esta automação.">
+          <Section step={2} title="Quando responder?" description="Escolha o canal e o que ativa esta automação.">
+            <div className="mb-4 flex flex-wrap gap-2">
+              {(["instagram", "whatsapp"] as Channel[]).map((c) => {
+                const on = form.channels.includes(c);
+                const connected = c === "instagram" ? instagram.length > 0 : whatsapp.length > 0;
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => {
+                      const next = on ? form.channels.filter((x) => x !== c) : [...form.channels, c];
+                      if (!next.length) return;
+                      setForm((f) => ({ ...f, channels: next, triggerEvent: next.includes("whatsapp") ? "dm" : f.triggerEvent }));
+                      if (!on) setPreviewChannel(c);
+                    }}
+                    className={cn(
+                      "flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-sm font-medium transition",
+                      on ? "border-brand-500 bg-brand-50/60 text-brand-800 ring-1 ring-brand-500" : "border-zinc-200 text-zinc-600 hover:border-zinc-300",
+                    )}
+                  >
+                    <ChannelGlyph channel={c} className="size-4" />
+                    {CHANNEL_INFO[c].label}
+                    {!connected && <span className="text-xs font-normal text-zinc-400">(não conectado)</span>}
+                  </button>
+                );
+              })}
+            </div>
+            {errors.channels && <p className="-mt-2 mb-3 text-xs text-red-600">{errors.channels}</p>}
             <div className="grid gap-2 sm:grid-cols-2">
-              {TRIGGER_OPTIONS.map(({ value, icon }) => {
+              {TRIGGER_OPTIONS.filter(({ value }) => form.channels.every((c) => TRIGGER_EVENT_INFO[value].channels.includes(c))).map(({ value, icon }) => {
                 const info = TRIGGER_EVENT_INFO[value];
                 const selected = form.triggerEvent === value;
                 return (
@@ -336,7 +380,13 @@ export default function AutomationForm() {
                 rows={5}
               />
             </Field>
-            <p className="mt-2 text-xs text-zinc-500">O Instagram não suporta negrito/itálico no Direct; quebras de linha e emojis funcionam normalmente.</p>
+            <p className="mt-2 text-xs text-zinc-500">
+              {onlyWhatsApp
+                ? "No WhatsApp, *negrito* e _itálico_ funcionam; quebras de linha e emojis também."
+                : channels.includes("whatsapp")
+                  ? "No WhatsApp, *negrito* e _itálico_ funcionam; no Instagram eles aparecem como texto normal. Quebras de linha e emojis funcionam nos dois."
+                  : "O Instagram não suporta negrito/itálico no Direct; quebras de linha e emojis funcionam normalmente."}
+            </p>
           </Section>
 
           <Section step={isComment ? 6 : isMention ? 4 : 5} title="Link, imagem e atraso" description="Tudo opcional.">
@@ -404,14 +454,24 @@ export default function AutomationForm() {
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+          {channels.length > 1 && (
+            <div className="flex justify-center">
+              <Segmented
+                value={shownChannel}
+                onChange={setPreviewChannel}
+                items={channels.map((c) => ({ value: c, label: CHANNEL_INFO[c].label }))}
+              />
+            </div>
+          )}
           <PhonePreview
+            channel={shownChannel}
             incoming={isMention ? "📣 Mencionou você em um Story" : form.keywords[0] ? `Oi! Me manda o ${form.keywords[0].text}?` : isComment ? "(comentou na sua publicação)" : undefined}
             outputs={previewOutputs}
-            accountName={account?.username}
+            accountName={shownChannel === "whatsapp" ? whatsapp[0]?.name ?? whatsapp[0]?.displayHandle : instagram[0]?.username}
             footer={form.delaySeconds ? `Enviada após ${DELAY_PRESETS.find((d) => d.seconds === form.delaySeconds)?.label ?? `${form.delaySeconds}s`}` : undefined}
           />
           {editing && automation ? (
-            <Simulator automationId={automation.id} defaultEvent={form.triggerEvent} />
+            <Simulator automationId={automation.id} channels={automation.channels} defaultEvent={form.triggerEvent} />
           ) : (
             <p className="text-center text-xs text-zinc-500">Salve como rascunho para testar com o simulador antes de publicar.</p>
           )}

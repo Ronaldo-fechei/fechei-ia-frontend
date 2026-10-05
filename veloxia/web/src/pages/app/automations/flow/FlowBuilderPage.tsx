@@ -17,7 +17,7 @@ import { ArrowLeft, CircleAlert, CircleCheck, CloudOff, FlaskConical, LoaderCirc
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useParams } from "react-router";
 import { toast } from "sonner";
-import { defaultNodeData, getOutputHandles, NODE_INFO, validateFlow, type Flow, type FlowNode, type NodeType } from "@veloxia/shared";
+import { defaultNodeData, flowChannels, getOutputHandles, NODE_INFO, validateFlow, type Flow, type FlowNode, type NodeType } from "@veloxia/shared";
 import { Simulator } from "../../../../components/automation/Simulator";
 import { StatusBadge } from "../../../../components/automation/badges";
 import { useFields } from "../../../../components/automation/MessageEditor";
@@ -506,6 +506,7 @@ function Builder({ automation }: { automation: AutomationFull }) {
                   key={selected.id}
                   node={selected}
                   issues={ui.issues.get(selected.id) ?? []}
+                  channels={flowChannels(flow)}
                   onChange={(data) => updateNodeData(selected.id, data)}
                   onDelete={() => deleteNode(selected.id)}
                   onDuplicate={() => duplicateNode(selected.id)}
@@ -524,6 +525,7 @@ function Builder({ automation }: { automation: AutomationFull }) {
               key={selected.id}
               node={selected}
               issues={ui.issues.get(selected.id) ?? []}
+              channels={flowChannels(flow)}
               onChange={(data) => updateNodeData(selected.id, data)}
               onDelete={() => deleteNode(selected.id)}
               onDuplicate={() => duplicateNode(selected.id)}
@@ -537,7 +539,7 @@ function Builder({ automation }: { automation: AutomationFull }) {
       </Drawer>
 
       <Drawer open={testOpen} onOpenChange={setTestOpen} title="Testar fluxo" description="Usa o rascunho atual. Nenhuma mensagem é enviada." width="max-w-md">
-        <Simulator automationId={automation.id} defaultEvent={triggerEvent?.event === "new_follower" ? "dm" : triggerEvent?.event ?? "dm"} className="h-[calc(100dvh-9rem)]" />
+        <Simulator automationId={automation.id} channels={flowChannels(flow)} defaultEvent={triggerEvent?.event === "new_follower" ? "dm" : triggerEvent?.event ?? "dm"} className="h-[calc(100dvh-9rem)]" />
       </Drawer>
     </FlowUiContext.Provider>
   );

@@ -90,6 +90,53 @@ export function SetupGuide() {
           <CopyField label="Termos de uso" value={s.meta.termsUrl} />
         </div>
       </div>
+
+      <div className="mt-8 grid gap-6 border-t border-zinc-100 pt-6 lg:grid-cols-2">
+        <div>
+          <p className="font-semibold text-zinc-900">WhatsApp (Cloud API + cadastro incorporado)</p>
+          <ul className="mt-3 space-y-2.5">
+            <Check2 ok={s.whatsapp.appConfigured} label="App da Meta com WhatsApp" hint="Defina META_APP_ID, META_APP_SECRET e WHATSAPP_CONFIG_ID (configuração do Login do Facebook para Empresas)." />
+            <Check2 ok={s.whatsapp.webhookConfigured} label="Webhook do WhatsApp" hint="Usa o mesmo META_WEBHOOK_VERIFY_TOKEN. Cadastre a URL abaixo no produto WhatsApp → Configuração." />
+          </ul>
+          <ol className="mt-4 list-decimal space-y-1.5 pl-5 text-sm text-zinc-600">
+            <li>No mesmo app “Empresa”, adicione os produtos <strong>WhatsApp</strong> e <strong>Login do Facebook para Empresas</strong>.</li>
+            <li>
+              Em Login do Facebook para Empresas → Configurações, crie uma configuração do tipo “Cadastro incorporado do WhatsApp” com as permissões{" "}
+              <code>{s.whatsapp.permissions.join(", ")}</code> e copie o ID (WHATSAPP_CONFIG_ID).
+            </li>
+            <li>Cadastre o domínio do {APP_NAME} em “Domínios permitidos” e “URIs de redirecionamento do OAuth válidos” (HTTPS).</li>
+            <li>
+              Em WhatsApp → Configuração, cadastre a URL de callback e o token, e assine os campos <code>{s.whatsapp.webhookFields.join(", ")}</code>.
+            </li>
+            <li>
+              Para atender outras empresas, conclua a verificação do negócio e torne-se <strong>Provedor de Tecnologia</strong> (Tech Provider), e solicite
+              acesso avançado às permissões acima na Análise do App.
+            </li>
+            <li>Cada cliente cadastra o próprio cartão na conta do WhatsApp Business — a Meta cobra as mensagens direto dele.</li>
+          </ol>
+          <div className="mt-4">
+            <CopyField label="URL de callback do webhook (WhatsApp)" value={s.whatsapp.webhookUrl} />
+          </div>
+        </div>
+        <div>
+          <p className="font-semibold text-zinc-900">Pagamentos ({s.payments.provider})</p>
+          <ul className="mt-3 space-y-2.5">
+            <Check2 ok={s.payments.configured} label="Mercado Pago configurado" hint="Defina MP_ACCESS_TOKEN (credencial de produção) e MP_WEBHOOK_SECRET (assinatura secreta das notificações)." />
+          </ul>
+          <ol className="mt-4 list-decimal space-y-1.5 pl-5 text-sm text-zinc-600">
+            <li>Em mercadopago.com.br/developers → Suas integrações, crie uma aplicação (Pagamentos online, com Assinaturas e Checkout Pro).</li>
+            <li>Copie o Access Token de produção para MP_ACCESS_TOKEN.</li>
+            <li>
+              Em Webhooks, cadastre a URL abaixo, marque os eventos <code>payment</code>, <code>subscription_preapproval</code> e{" "}
+              <code>subscription_authorized_payment</code>, e copie a assinatura secreta para MP_WEBHOOK_SECRET.
+            </li>
+            <li>Teste primeiro com as credenciais e usuários de teste do Mercado Pago.</li>
+          </ol>
+          <div className="mt-4">
+            <CopyField label="URL de notificações (Mercado Pago)" value={s.payments.webhookUrl} />
+          </div>
+        </div>
+      </div>
     </Card>
   );
 }
@@ -101,7 +148,15 @@ const FAQ: { q: string; a: ReactNode }[] = [
   },
   {
     q: "O que é a janela de 24 horas?",
-    a: "Pela regra da Meta, você só pode enviar mensagens até 24 horas depois da última mensagem da pessoa. Por isso, esperas longas nos fluxos são limitadas e mensagens fora da janela não são enviadas.",
+    a: "Pela regra da Meta, mensagens livres só podem ser enviadas até 24 horas depois da última mensagem da pessoa. No Instagram, depois disso não é possível enviar. No WhatsApp, depois disso só é possível enviar modelos aprovados pela Meta (bloco “Modelo do WhatsApp”).",
+  },
+  {
+    q: "Quanto custa o WhatsApp?",
+    a: "A assinatura do Veloxia cobre a plataforma. A Meta cobra as mensagens do WhatsApp direto no cartão da sua conta do WhatsApp Business: respostas em até 24h após a mensagem do cliente (atendimento) não são cobradas; modelos de marketing e utilidade são cobrados por mensagem entregue. Veja a estimativa do mês em Canais → WhatsApp.",
+  },
+  {
+    q: "Posso continuar usando o app WhatsApp Business no celular?",
+    a: "Sim, se a Meta liberar o modo “app + API” (coexistência) para o seu número: marque essa opção ao conectar. As mensagens que você enviar pelo celular aparecem na Caixa de entrada.",
   },
   {
     q: "Como funciona o Comentário → Direct?",
@@ -116,8 +171,12 @@ const FAQ: { q: string; a: ReactNode }[] = [
     a: "Na Caixa de entrada, clique em “Assumir conversa”. As automações ficam pausadas para esse contato até você clicar em “Retomar automação”.",
   },
   {
-    q: "Vocês guardam minha senha do Instagram?",
-    a: `Não. O ${APP_NAME} usa somente o login oficial do Instagram. Guardamos apenas o token de acesso, criptografado.`,
+    q: "Vocês guardam minha senha do Instagram ou do WhatsApp?",
+    a: `Não. O ${APP_NAME} usa somente o login oficial da Meta. Guardamos apenas o token de acesso, criptografado, que nunca é exibido.`,
+  },
+  {
+    q: "Como pago e cancelo o plano?",
+    a: "Em Configurações → Plano. O pagamento é feito no Mercado Pago (cartão na assinatura mensal; PIX, cartão ou boleto no anual). O cancelamento é imediato para as próximas cobranças e o plano vale até o fim do período pago.",
   },
 ];
 
@@ -125,13 +184,13 @@ export default function HelpPage() {
   const { data } = useSystemStatus();
   return (
     <div className="space-y-6">
-      <PageHeader title="Ajuda" description="Tudo para colocar seu robô no ar e entender as regras do Instagram." />
+      <PageHeader title="Ajuda" description="Tudo para colocar seu robô no ar e entender as regras do Instagram e do WhatsApp." />
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardTitle title="Comece aqui" />
           <ol className="space-y-4">
             {[
-              ["Conecte o Instagram", "Menu Instagram → Conectar. Use uma conta profissional e ative “Permitir acesso às mensagens” no app."],
+              ["Conecte seus canais", "Menu Canais → Instagram e/ou WhatsApp. Tudo pelo login oficial da Meta."],
               ["Crie uma automação", "Automações → Nova automação. Escolha as palavras-chave e escreva a resposta."],
               ["Teste", "Use “Testar automação” para ver qual palavra é detectada e o que será enviado."],
               ["Publique", "Clique em Publicar. A partir daí, cada mensagem com a palavra-chave recebe a resposta."],
@@ -148,12 +207,19 @@ export default function HelpPage() {
           </ol>
         </Card>
         <Card>
-          <CardTitle title="Requisitos do Instagram" />
-          <ul className="list-disc space-y-2 pl-5 text-sm text-zinc-600">
+          <CardTitle title="Requisitos" />
+          <p className="text-sm font-medium text-zinc-800">Instagram</p>
+          <ul className="mt-1 list-disc space-y-2 pl-5 text-sm text-zinc-600">
             <li>Conta profissional (Comercial ou Criador de conteúdo).</li>
             <li>“Permitir acesso às mensagens” ativado em Configurações → Mensagens e respostas aos stories → Ferramentas conectadas.</li>
-            <li>Enquanto o app estiver em modo de desenvolvimento na Meta, apenas contas adicionadas como testadoras conseguem conectar.</li>
           </ul>
+          <p className="mt-4 text-sm font-medium text-zinc-800">WhatsApp</p>
+          <ul className="mt-1 list-disc space-y-2 pl-5 text-sm text-zinc-600">
+            <li>Acesso de administrador ao Gerenciador de Negócios da Meta (ou crie durante a conexão).</li>
+            <li>Um número que receba SMS ou ligação para verificação.</li>
+            <li>Cartão cadastrado na conta do WhatsApp Business (cobrança das mensagens pela Meta).</li>
+          </ul>
+          <p className="mt-4 text-xs text-zinc-500">Enquanto o app estiver em modo de desenvolvimento na Meta, apenas contas com função no app conseguem conectar.</p>
           {data?.supportEmail && (
             <a href={`mailto:${data.supportEmail}`} className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-brand-700 hover:underline">
               <Mail className="size-4" /> {data.supportEmail}
@@ -178,8 +244,8 @@ export default function HelpPage() {
       </Card>
 
       <Callout tone="info" title="Regras da plataforma que respeitamos">
-        Janela de 24h para mensagens · 1 resposta privada por comentário (até 7 dias) · limites de envio da Meta · sem automação por senha, navegador ou
-        métodos não oficiais.
+        Janela de 24h para mensagens · modelos aprovados no WhatsApp fora da janela · 1 resposta privada por comentário (até 7 dias) · limites de envio e
+        qualidade da Meta · sem automação por senha, navegador ou métodos não oficiais.
       </Callout>
 
       <SetupGuide />

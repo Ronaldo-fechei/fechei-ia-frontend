@@ -2,7 +2,9 @@ import {
   CircleStop,
   Clock,
   GitBranch,
+  FileCheck2,
   Headphones,
+  Send,
   Image,
   KeyRound,
   Link2,
@@ -30,6 +32,8 @@ export const NODE_STYLE: Record<NodeType, { icon: ReactNode; color: string; bg: 
   add_tag: { icon: <Tag />, color: "text-emerald-700", bg: "bg-emerald-100" },
   remove_tag: { icon: <Tags />, color: "text-emerald-700", bg: "bg-emerald-100" },
   capture: { icon: <ListChecks />, color: "text-emerald-700", bg: "bg-emerald-100" },
+  whatsapp_template: { icon: <FileCheck2 />, color: "text-emerald-700", bg: "bg-emerald-100" },
+  whatsapp_handoff: { icon: <Send />, color: "text-emerald-700", bg: "bg-emerald-100" },
   handoff: { icon: <Headphones />, color: "text-zinc-700", bg: "bg-zinc-200" },
   end: { icon: <CircleStop />, color: "text-zinc-700", bg: "bg-zinc-200" },
 };
@@ -39,5 +43,6 @@ export const PALETTE_GROUPS: { title: string; types: NodeType[] }[] = [
   { title: "Mensagens", types: ["message", "image", "video", "link", "buttons"] },
   { title: "Lógica", types: ["condition", "delay"] },
   { title: "Contato", types: ["add_tag", "remove_tag", "capture"] },
+  { title: "Canais", types: ["whatsapp_template", "whatsapp_handoff"] },
   { title: "Fim", types: ["handoff", "end"] },
 ];

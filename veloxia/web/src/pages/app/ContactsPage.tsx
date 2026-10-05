@@ -3,7 +3,8 @@ import { Contact as ContactIcon, Download, MessagesSquare, Search, Trash, Zap } 
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import { CONTACT_SOURCES } from "@veloxia/shared";
+import { CONTACT_SOURCES, formatPhone } from "@veloxia/shared";
+import { ChannelGlyph } from "../../components/brand/Logo";
 import { ExecutionBadge } from "../../components/automation/badges";
 import { Avatar, Badge, Button, ButtonLink, Card, Drawer, EmptyState, Field, Input, PageHeader, Select, Skeleton, Switch, TagPill, useConfirm } from "../../components/ui";
 import { api, errorMessage, qs } from "../../lib/api";
@@ -117,8 +118,10 @@ function ContactDrawer({ id, onClose }: { id: string | null; onClose: () => void
 
           <dl className="grid grid-cols-2 gap-3 rounded-xl bg-zinc-50 p-4 text-sm">
             <div>
-              <dt className="text-xs text-zinc-500">Instagram ID</dt>
-              <dd className="truncate font-mono text-xs">{c.igsid}</dd>
+              <dt className="text-xs text-zinc-500">{c.channel === "whatsapp" ? "WhatsApp" : "Instagram ID"}</dt>
+              <dd className={c.channel === "whatsapp" ? "truncate text-sm" : "truncate font-mono text-xs"}>
+                {c.channel === "whatsapp" ? formatPhone(c.phone ?? c.externalId) : c.externalId}
+              </dd>
             </div>
             <div>
               <dt className="text-xs text-zinc-500">Primeira interação</dt>
@@ -320,9 +323,12 @@ export default function ContactsPage() {
                       <div className="flex items-center gap-3">
                         <Avatar src={c.profilePicUrl} name={c.name ?? c.username} size={34} />
                         <div className="min-w-0">
-                          <p className="truncate font-medium">{c.name ?? (c.username ? `@${c.username}` : "Contato")}</p>
+                          <p className="flex items-center gap-1.5 truncate font-medium">
+                            <ChannelGlyph channel={c.channel} className={cn("size-3.5 shrink-0", c.channel === "whatsapp" ? "text-emerald-600" : "text-pink-600")} />
+                            {c.name ?? (c.username ? `@${c.username}` : "Contato")}
+                          </p>
                           <p className="truncate text-xs text-zinc-500">
-                            {c.username ? `@${c.username}` : c.igsid}
+                            {c.channel === "whatsapp" ? formatPhone(c.phone ?? c.externalId) : c.username ? `@${c.username}` : c.externalId}
                             {c.status !== "active" && <span className="ml-1 text-red-600">· automações bloqueadas</span>}
                           </p>
                         </div>

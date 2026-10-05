@@ -1,4 +1,4 @@
-import type { AutomationStatus, Flow, FlowValidation, PlanLimitKey, QuickAutomationInput, Tone } from "@veloxia/shared";
+import type { AutomationStatus, BillingCycle, Channel, Flow, FlowValidation, PlanFeatureKey, PlanLimitKey, QuickAutomationInput, Tone } from "@veloxia/shared";
 
 export interface Me {
   user: { id: string; email: string; name: string; role: "user" | "admin" };
@@ -21,6 +21,8 @@ export interface SystemStatus {
   appName: string;
   emailEnabled: boolean;
   instagramEnabled: boolean;
+  whatsappEnabled: boolean;
+  paymentsEnabled: boolean;
   aiEnabled: boolean;
   supportEmail: string | null;
   setup?: {
@@ -39,14 +41,29 @@ export interface SystemStatus {
       humanAgentEnabled: boolean;
       httpsOk: boolean;
     };
+    whatsapp: {
+      appConfigured: boolean;
+      webhookConfigured: boolean;
+      webhookUrl: string;
+      webhookFields: string[];
+      permissions: string[];
+      rates: Record<string, number>;
+    };
+    payments: { configured: boolean; provider: string; webhookUrl: string };
     email: { configured: boolean };
     ai: { configured: boolean; model: string | null };
   };
 }
 
-export interface InstagramAccount {
+/** Conta conectada (Instagram ou WhatsApp). */
+export interface ChannelAccount {
   id: string;
-  igUserId: string;
+  channel: Channel;
+  externalId: string;
+  /** Instagram: usuário sem @. WhatsApp: número em dígitos. */
+  handle: string;
+  /** "@loja" ou "+55 11 99999-0000". */
+  displayHandle: string;
   username: string;
   name: string | null;
   profilePictureUrl: string | null;
@@ -62,7 +79,70 @@ export interface InstagramAccount {
   lastErrorAt: string | null;
   lastWebhookAt: string | null;
   connectedAt: string;
-  permissions: { messages: boolean; comments: boolean };
+  permissions?: { messages: boolean; comments: boolean };
+  whatsapp?: { wabaId: string | null; qualityRating: string | null; messagingLimitTier: string | null; nameStatus: string | null; coexistence: boolean };
+}
+
+/** Compatibilidade: telas do Instagram usam este nome. */
+export type InstagramAccount = ChannelAccount;
+
+export interface WhatsAppTemplate {
+  id: string;
+  channelAccountId: string;
+  name: string;
+  language: string;
+  category: string;
+  status: string;
+  rejectedReason: string | null;
+  bodyText: string;
+  headerFormat: string | null;
+  headerText: string | null;
+  paramsCount: number;
+  updatedAt: string;
+}
+
+export interface WhatsAppUsage {
+  from: string;
+  to: string;
+  categories: { category: string; messages: number; rateBRL: number | null; estimatedBRL: number | null }[];
+  totalMessages: number;
+  estimatedTotalBRL: number;
+  freeServicePerNumber: number;
+}
+
+export interface PublicPlan {
+  id: string;
+  name: string;
+  description: string;
+  priceCents: number;
+  annualPriceCents: number | null;
+  promoPriceCents: number | null;
+  promoMonths: number;
+  limits: Partial<Record<PlanLimitKey, number | null>>;
+  features: Partial<Record<PlanFeatureKey, boolean>>;
+  perks: string[];
+  highlighted: boolean;
+  isDefault: boolean;
+}
+
+export interface BillingInfo {
+  currentPlanId: string;
+  subscription: {
+    planId: string;
+    status: "trialing" | "active" | "past_due" | "canceled" | "expired";
+    provider: string | null;
+    billingCycle: BillingCycle;
+    amountCents: number | null;
+    promoEndsAt: string | null;
+    currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+    trialEndsAt: string | null;
+  } | null;
+  usage: Record<PlanLimitKey, number>;
+  plans: PublicPlan[];
+  promoEligible: boolean;
+  history: { id: string; planId: string; billingCycle: BillingCycle; amountCents: number; status: string; kind: string; createdAt: string; paidAt: string | null }[];
+  payments: { enabled: boolean; provider: string; message: string | null; supportEmail: string | null };
 }
 
 export interface AutomationSummary {
@@ -75,7 +155,8 @@ export interface AutomationSummary {
   triggerEvent: string;
   priority: number;
   cooldownSeconds: number;
-  instagramAccountId: string | null;
+  channelAccountId: string | null;
+  channels: Channel[];
   keywords: string[];
   actions: string[];
   executionsCount: number;
@@ -100,7 +181,8 @@ export interface AutomationFull {
   triggerEvent: string;
   priority: number;
   cooldownSeconds: number;
-  instagramAccountId: string | null;
+  channelAccountId: string | null;
+  channels: Channel[];
   flow: Flow | null;
   draftFlow: Flow;
   quickConfig: (QuickAutomationInput & Record<string, unknown>) | null;
@@ -138,7 +220,8 @@ export interface SimOutput {
     | { kind: "text"; text: string; quickReplies?: { title: string; payload: string }[] }
     | { kind: "image"; url: string }
     | { kind: "video"; url: string }
-    | { kind: "buttons"; text: string; buttons: ({ type: "url"; title: string; url: string } | { type: "postback"; title: string; payload: string })[] };
+    | { kind: "buttons"; text: string; buttons: ({ type: "url"; title: string; url: string } | { type: "postback"; title: string; payload: string })[] }
+    | { kind: "template"; name: string; language: string; previewText: string; bodyParams: string[]; headerImageUrl?: string };
 }
 
 export interface ExecutionStep {
@@ -165,8 +248,10 @@ export interface SimulationResult {
 
 export interface ContactRow {
   id: string;
-  igsid: string;
+  channel: Channel;
+  externalId: string;
   username: string | null;
+  phone: string | null;
   name: string | null;
   profilePicUrl: string | null;
   source: string;
@@ -184,12 +269,14 @@ export interface ConversationRow {
   status: "open" | "closed";
   mode: "automation" | "human";
   unreadCount: number;
+  channel: Channel;
   lastMessageAt: string | null;
   lastMessagePreview: string | null;
   lastMessageDirection: "inbound" | "outbound" | null;
   contactId: string;
   contactName: string | null;
   contactUsername: string | null;
+  contactPhone: string | null;
   contactPic: string | null;
   lastKeyword: string | null;
   lastAutomationName: string | null;
@@ -199,11 +286,11 @@ export interface ConversationRow {
 export interface MessageRow {
   id: string;
   direction: "inbound" | "outbound";
-  source: "contact" | "automation" | "agent" | "instagram_app" | "system";
+  source: "contact" | "automation" | "agent" | "native_app" | "system";
   type: string;
   text: string | null;
   payload: Record<string, any> | null;
-  status: "received" | "sending" | "sent" | "failed" | "deleted";
+  status: "received" | "sending" | "sent" | "delivered" | "read" | "failed" | "deleted";
   errorMessage: string | null;
   createdAt: string;
   automationName: string | null;

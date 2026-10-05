@@ -1,9 +1,9 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, PartyPopper, Rocket } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { InstagramGlyph, Logo } from "../../components/brand/Logo";
+import { ChannelGlyph, InstagramGlyph, Logo } from "../../components/brand/Logo";
 import { KeywordEditor, type KeywordValue } from "../../components/automation/KeywordEditor";
 import { MessageEditor } from "../../components/automation/MessageEditor";
 import { PhonePreview, previewText } from "../../components/automation/PhonePreview";
@@ -12,10 +12,11 @@ import { Avatar, Button, ButtonLink, Callout, Card, Field, Input } from "../../c
 import { useAuth, useMe, useSystemStatus } from "../../hooks/useAuth";
 import { api, errorMessage } from "../../lib/api";
 import { cn } from "../../lib/cn";
-import type { InstagramAccount } from "../../lib/types";
+import { useChannelAccounts } from "../../hooks/useChannels";
 import { startInstagramConnect } from "../app/InstagramPage";
+import { ConnectWhatsAppButton } from "../app/WhatsAppPanel";
 
-const STEPS = ["Conectar Instagram", "Primeira automação", "Palavra-chave", "Resposta", "Publicar"];
+const STEPS = ["Conectar canal", "Primeira automação", "Palavra-chave", "Resposta", "Publicar"];
 
 export default function Onboarding() {
   const me = useMe();
@@ -24,8 +25,10 @@ export default function Onboarding() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { data: system } = useSystemStatus();
-  const accounts = useQuery({ queryKey: ["instagram-accounts"], queryFn: () => api.get<{ accounts: InstagramAccount[] }>("/instagram/accounts") });
-  const account = accounts.data?.accounts[0];
+  const { accounts: connected, instagram, whatsapp } = useChannelAccounts();
+  const account = connected[0];
+  const channel = instagram.length ? "instagram" : whatsapp.length ? "whatsapp" : "instagram";
+  const accountLabel = account ? (account.channel === "whatsapp" ? account.name ?? account.displayHandle : account.displayHandle) : null;
   const [step, setStep] = useState(0);
   const [connecting, setConnecting] = useState(false);
   const [name, setName] = useState("Link do produto");
@@ -67,7 +70,7 @@ export default function Onboarding() {
       const { automation } = await api.post<{ automation: { id: string } }>("/automations", {
         name,
         mode: "quick",
-        quick: { triggerEvent: "dm", keywords, message, linkUrl: url.trim(), buttonTitle: url.trim() ? buttonTitle || "Abrir link" : "" },
+        quick: { triggerEvent: "dm", channels: [channel], keywords, message, linkUrl: url.trim(), buttonTitle: url.trim() ? buttonTitle || "Abrir link" : "" },
         publish: true,
       });
       setCreatedId(automation.id);
@@ -94,17 +97,17 @@ export default function Onboarding() {
         <h1 className="mt-6 text-3xl font-semibold tracking-tight">Seu primeiro robô está ativo.</h1>
         <p className="mt-3 max-w-md text-zinc-600">
           {account
-            ? `Quando alguém mandar “${keywords[0]?.text.toUpperCase()}” para @${account.username}, a resposta sai automaticamente.`
-            : "Conecte o Instagram para que ele comece a responder as mensagens."}
+            ? `Quando alguém mandar “${keywords[0]?.text.toUpperCase()}” para ${accountLabel}, a resposta sai automaticamente.`
+            : "Conecte o Instagram ou o WhatsApp para que ele comece a responder as mensagens."}
         </p>
         <div className="mt-8 w-full max-w-md">
-          <Simulator automationId={createdId} className="h-80 text-left" />
+          <Simulator automationId={createdId} channels={[channel]} className="h-80 text-left" />
         </div>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           {!account && (
-            <Button icon={<InstagramGlyph className="size-4" />} onClick={connect} loading={connecting}>
-              Conectar Instagram
-            </Button>
+            <ButtonLink to="/app/canais" icon={<ChannelGlyph channel="instagram" className="size-4" />}>
+              Conectar um canal
+            </ButtonLink>
           )}
           <ButtonLink to="/app" variant={account ? "primary" : "secondary"}>
             Ir para o painel
@@ -123,7 +126,7 @@ export default function Onboarding() {
         </button>
       </header>
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Vamos configurar seu Instagram, {me.user.name.split(" ")[0]}!</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Vamos configurar seu atendimento, {me.user.name.split(" ")[0]}!</h1>
         <p className="mt-1 text-zinc-500">Em poucos passos seu robô começa a responder as mensagens.</p>
         <ol className="mt-6 flex gap-2 overflow-x-auto pb-1">
           {STEPS.map((s, i) => (
@@ -138,16 +141,23 @@ export default function Onboarding() {
           <Card className="p-6">
             {step === 0 && (
               <div className="space-y-5">
-                <h2 className="text-lg font-semibold">Etapa 1: Conectar Instagram</h2>
+                <h2 className="text-lg font-semibold">Etapa 1: Conectar Instagram ou WhatsApp</h2>
                 {account ? (
-                  <div className="flex items-center gap-3 rounded-xl bg-emerald-50 p-4">
-                    <Avatar src={account.profilePictureUrl} name={account.username} size={44} />
-                    <div>
-                      <p className="font-medium">@{account.username}</p>
-                      <p className="text-sm text-emerald-700">Conectado com sucesso</p>
-                    </div>
+                  <div className="space-y-2">
+                    {connected.map((a) => (
+                      <div key={a.id} className="flex items-center gap-3 rounded-xl bg-emerald-50 p-4">
+                        <Avatar src={a.profilePictureUrl} name={a.name ?? a.handle} size={44} />
+                        <div>
+                          <p className="flex items-center gap-1.5 font-medium">
+                            <ChannelGlyph channel={a.channel} className="size-4" />
+                            {a.channel === "whatsapp" ? a.name ?? a.displayHandle : a.displayHandle}
+                          </p>
+                          <p className="text-sm text-emerald-700">Conectado com sucesso</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ) : !system?.instagramEnabled ? (
+                ) : !system?.instagramEnabled && !system?.whatsappEnabled ? (
                   <Callout tone="warning" title="Integração com a Meta ainda não configurada">
                     O servidor ainda não tem as credenciais do app da Meta. Você pode criar sua automação agora e conectar depois — veja o passo a passo em
                     Ajuda.
@@ -155,13 +165,23 @@ export default function Onboarding() {
                 ) : (
                   <>
                     <p className="text-zinc-600">
-                      Use uma conta <strong>profissional</strong> (Comercial ou Criador). Você vai entrar pelo site oficial do Instagram — nunca pedimos
-                      sua senha.
+                      Conecte uma conta <strong>profissional</strong> do Instagram e/ou o WhatsApp da empresa. Tudo pelo login oficial da Meta — nunca
+                      pedimos sua senha.
                     </p>
                     <Callout tone="info">No app do Instagram, ative: Configurações → Mensagens e respostas aos stories → Ferramentas conectadas → Permitir acesso às mensagens.</Callout>
-                    <Button size="lg" icon={<InstagramGlyph className="size-5" />} onClick={connect} loading={connecting}>
-                      Conectar com o Instagram
-                    </Button>
+                    <div className="flex flex-wrap gap-3">
+                      {system?.instagramEnabled && (
+                        <Button size="lg" icon={<InstagramGlyph className="size-5" />} onClick={connect} loading={connecting}>
+                          Conectar com o Instagram
+                        </Button>
+                      )}
+                      {system?.whatsappEnabled && <ConnectWhatsAppButton variant={system.instagramEnabled ? "secondary" : "primary"} />}
+                    </div>
+                    {system?.whatsappEnabled && (
+                      <p className="text-xs text-zinc-500">
+                        No WhatsApp, a Meta cobra as mensagens direto na sua conta do WhatsApp Business (respostas em até 24h ao cliente não são cobradas).
+                      </p>
+                    )}
                   </>
                 )}
               </div>
@@ -215,7 +235,7 @@ export default function Onboarding() {
                     <dd className="truncate font-medium">{url || "—"}</dd>
                   </div>
                 </dl>
-                {!account && <Callout tone="warning">Sem Instagram conectado, a automação fica ativa mas só começa a responder depois da conexão.</Callout>}
+                {!account && <Callout tone="warning">Sem canal conectado, a automação fica ativa mas só começa a responder depois da conexão.</Callout>}
                 <Button size="lg" icon={<Rocket className="size-5" />} onClick={publish} loading={publishing}>
                   Ativar automação
                 </Button>
@@ -234,7 +254,7 @@ export default function Onboarding() {
             </div>
           </Card>
           <div className="hidden lg:block">
-            <PhonePreview incoming={keywords[0] ? `Oi! Me manda o ${keywords[0].text}?` : undefined} outputs={outputs} accountName={account?.username} />
+            <PhonePreview incoming={keywords[0] ? `Oi! Me manda o ${keywords[0].text}?` : undefined} outputs={outputs} channel={channel} accountName={accountLabel ?? undefined} />
             <p className="mt-3 text-center text-xs text-zinc-500">Pré-visualização da resposta</p>
           </div>
         </div>

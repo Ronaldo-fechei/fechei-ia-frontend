@@ -31,3 +31,18 @@ export function InstagramGlyph({ className }: { className?: string }) {
     </svg>
   );
 }
+
+/** Ícone genérico de telefone em balão para representar o WhatsApp (sem usar a marca registrada). */
+export function WhatsAppGlyph({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cn("size-4", className)} aria-hidden="true">
+      <path d="M3.5 20.5l1.3-4A8.5 8.5 0 1 1 8 19.6z" />
+      <path d="M9 8.6c.2-.5.5-.6.9-.6h.4c.2 0 .4.1.5.4l.6 1.4c.1.3 0 .5-.1.7l-.4.5c-.1.2-.1.4 0 .5.6 1 1.3 1.7 2.3 2.3.2.1.4.1.5 0l.5-.4c.2-.2.5-.2.7-.1l1.4.6c.3.1.4.3.4.5v.4c0 .4-.1.7-.6.9-.8.4-1.8.4-2.9-.1-1.8-.8-3.3-2.3-4.1-4.1-.5-1.1-.5-2.1-.1-2.9z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** Ícone do canal. */
+export function ChannelGlyph({ channel, className }: { channel: "instagram" | "whatsapp"; className?: string }) {
+  return channel === "whatsapp" ? <WhatsAppGlyph className={className} /> : <InstagramGlyph className={className} />;
+}

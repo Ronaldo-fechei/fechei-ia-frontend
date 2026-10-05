@@ -1,7 +1,7 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { CircleAlert } from "lucide-react";
 import { createContext, memo, useContext } from "react";
-import { getOutputHandles, MATCH_TYPE_LABELS, NODE_INFO, TRIGGER_EVENT_INFO, type NodeDataMap } from "@veloxia/shared";
+import { CHANNEL_INFO, getOutputHandles, MATCH_TYPE_LABELS, NODE_INFO, TRIGGER_EVENT_INFO, type Channel, type NodeDataMap } from "@veloxia/shared";
 import { cn } from "../../../../lib/cn";
 import { formatDuration } from "../../../../lib/format";
 import type { BlockNodeType } from "./convert";
@@ -25,6 +25,7 @@ function Summary({ node }: { node: BlockNodeType["data"]["node"] }) {
       return (
         <p>
           {info.label}
+          <span className="block text-zinc-400">{(d.channels ?? ["instagram"]).map((c: Channel) => CHANNEL_INFO[c].label).join(" + ")}</span>
           {d.event === "comment" && <span className="block text-zinc-400">{d.mediaIds.length ? `${d.mediaIds.length} publicação(ões)` : "Todas as publicações"}</span>}
         </p>
       );
@@ -74,6 +75,22 @@ function Summary({ node }: { node: BlockNodeType["data"]["node"] }) {
         <div>
           <p className="whitespace-pre-wrap">{clip(d.question, 60) || <span className="text-zinc-400 italic">Pergunta</span>}</p>
           {d.fieldKey && <p className="mt-1 text-[11px] text-zinc-400">Salva em: {ui.fieldLabels.get(d.fieldKey) ?? d.fieldKey}</p>}
+        </div>
+      );
+    case "whatsapp_template":
+      return d.templateName ? (
+        <div>
+          <p className="font-mono text-[11px] text-emerald-700">{d.templateName}</p>
+          {d.bodyText && <p className="mt-0.5 whitespace-pre-wrap">{clip(d.bodyText, 70)}</p>}
+        </div>
+      ) : (
+        <p className="text-zinc-400 italic">Escolha um modelo aprovado</p>
+      );
+    case "whatsapp_handoff":
+      return (
+        <div>
+          <p className="whitespace-pre-wrap">{clip(d.text, 60) || <span className="text-zinc-400 italic">Texto da mensagem</span>}</p>
+          <p className="mt-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-center text-[11px] font-medium text-emerald-800">{d.buttonTitle || "Abrir WhatsApp"}</p>
         </div>
       );
     case "handoff":

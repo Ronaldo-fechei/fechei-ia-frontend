@@ -48,12 +48,12 @@ interface DashboardData {
     contactName: string | null;
     contactPic: string | null;
   }[];
-  onboarding: { instagramConnected: boolean; automationCreated: boolean; automationActive: boolean; firstMessageReceived: boolean; completed: boolean };
+  onboarding: { channelConnected: boolean; automationCreated: boolean; automationActive: boolean; firstMessageReceived: boolean; completed: boolean };
 }
 
 function Checklist({ o }: { o: DashboardData["onboarding"] }) {
   const steps = [
-    { done: o.instagramConnected, label: "Conectar sua conta do Instagram", to: "/app/instagram" },
+    { done: o.channelConnected, label: "Conectar o Instagram ou o WhatsApp", to: "/app/canais" },
     { done: o.automationCreated, label: "Criar a primeira automação", to: "/app/automacoes/nova" },
     { done: o.automationActive, label: "Publicar uma automação", to: "/app/automacoes" },
     { done: o.firstMessageReceived, label: "Receber a primeira mensagem", to: "/app/ajuda" },

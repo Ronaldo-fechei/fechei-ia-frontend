@@ -1,18 +1,19 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CircleCheck, CircleX, KeyRound, Lock, RefreshCw, ShieldCheck, Unplug } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { TRIGGER_EVENT_INFO, type TriggerEvent } from "@veloxia/shared";
 import { InstagramGlyph } from "../../components/brand/Logo";
-import { Avatar, Badge, Button, Callout, Card, CardTitle, PageHeader, Skeleton, useConfirm } from "../../components/ui";
+import { Avatar, Badge, Button, Callout, Card, CardTitle, Skeleton, useConfirm } from "../../components/ui";
+import { useChannelAccounts } from "../../hooks/useChannels";
 import { useSystemStatus } from "../../hooks/useAuth";
 import { api, errorMessage } from "../../lib/api";
 import { formatDate, formatDateTime, formatNumber, relativeTime } from "../../lib/format";
 import type { InstagramAccount } from "../../lib/types";
 import { SetupGuide } from "./HelpPage";
 
-export async function startInstagramConnect(returnTo = "/app/instagram") {
+export async function startInstagramConnect(returnTo = "/app/canais?canal=instagram") {
   const { url } = await api.post<{ url: string }>("/instagram/connect", { returnTo });
   window.location.assign(url);
 }
@@ -55,9 +56,9 @@ function AccountCard({ account }: { account: InstagramAccount }) {
   const qc = useQueryClient();
   const confirm = useConfirm();
   const resubscribe = useMutation({
-    mutationFn: () => api.post<{ ok: boolean }>(`/instagram/accounts/${account.id}/resubscribe`),
+    mutationFn: () => api.post<{ ok: boolean }>(`/channels/accounts/${account.id}/resubscribe`),
     onSuccess: (r) => {
-      qc.invalidateQueries({ queryKey: ["instagram-accounts"] });
+      qc.invalidateQueries({ queryKey: ["channel-accounts"] });
       r.ok ? toast.success("Recebimento de mensagens ativado") : toast.error("Ainda não foi possível ativar. Veja o erro na tela.");
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -71,7 +72,8 @@ function AccountCard({ account }: { account: InstagramAccount }) {
     });
     if (!ok) return;
     try {
-      await api.post(`/instagram/accounts/${account.id}/disconnect`);
+      await api.post(`/channels/accounts/${account.id}/disconnect`);
+      qc.invalidateQueries({ queryKey: ["channel-accounts"] });
       qc.invalidateQueries({ queryKey: ["instagram-accounts"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       toast.success("Conta desconectada");
@@ -160,7 +162,7 @@ function AccountCard({ account }: { account: InstagramAccount }) {
           <ul className="space-y-3">
             {events.map((ev) => {
               const info = TRIGGER_EVENT_INFO[ev];
-              const permitted = ev === "comment" ? account.permissions.comments : ev === "new_follower" ? false : account.permissions.messages;
+              const permitted = ev === "comment" ? !!account.permissions?.comments : ev === "new_follower" ? false : !!account.permissions?.messages;
               const ok = info.available && permitted;
               return (
                 <li key={ev} className="flex gap-2.5 text-sm">
@@ -193,9 +195,10 @@ function AccountCard({ account }: { account: InstagramAccount }) {
   );
 }
 
-export default function InstagramPage() {
+/** Painel do Instagram dentro da página "Canais". */
+export function InstagramPanel() {
   const [params, setParams] = useSearchParams();
-  const { data, isLoading } = useQuery({ queryKey: ["instagram-accounts"], queryFn: () => api.get<{ accounts: InstagramAccount[] }>("/instagram/accounts") });
+  const { instagram, isLoading } = useChannelAccounts();
   const { data: system } = useSystemStatus();
   const result = params.get("instagram");
   const message = params.get("mensagem");
@@ -210,11 +213,10 @@ export default function InstagramPage() {
     setParams(params, { replace: true });
   };
 
-  const account = data?.accounts[0];
+  const account = instagram[0];
 
   return (
     <div>
-      <PageHeader title="Conectar Instagram" description="Conexão oficial com a Meta para responder Direct, comentários e Stories." />
       {result && result !== "connected" && (
         <Callout tone={result === "denied" ? "warning" : "error"} className="mb-6" title={result === "denied" ? "Conexão cancelada" : "Não foi possível conectar"} action={<Button size="sm" variant="secondary" onClick={clearResult}>Fechar</Button>}>
           {message ?? "Tente novamente."}

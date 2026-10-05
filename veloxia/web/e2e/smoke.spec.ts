@@ -93,3 +93,26 @@ test("senha errada mostra erro amigável", async ({ page }) => {
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page.getByText(/e-mail ou senha/i).first()).toBeVisible();
 });
+
+test("canais, planos e preços", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Planos simples, em reais" })).toBeVisible();
+  await expect(page.getByText("Automação de conversas para negócios")).toBeVisible();
+
+  await signup(page, uniqueEmail());
+  await page.getByRole("button", { name: "Pular e ir para o painel" }).click();
+
+  // Canais: abas do Instagram e do WhatsApp; sem credenciais da Meta, a tela explica o que falta (sem botão falso).
+  await page.goto("/app/instagram");
+  await expect(page).toHaveURL(/\/app\/canais\?canal=instagram/);
+  await page.getByRole("tab", { name: /WhatsApp/ }).click();
+  await expect(page).toHaveURL(/canal=whatsapp/);
+  await expect(page.getByText("A integração com o WhatsApp ainda não foi configurada neste servidor")).toBeVisible();
+
+  // Plano: uso do plano gratuito e os planos pagos (pagamento indisponível sem MP_ACCESS_TOKEN).
+  await page.goto("/app/configuracoes?aba=plano");
+  await expect(page.getByText("Plano atual: Gratuito")).toBeVisible();
+  await expect(page.getByText("Contatos ativos por mês", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pro", exact: true })).toBeVisible();
+  await expect(page.getByText("O pagamento online ainda não está disponível", { exact: false })).toBeVisible();
+});

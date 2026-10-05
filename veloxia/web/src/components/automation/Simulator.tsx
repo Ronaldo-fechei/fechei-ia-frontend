@@ -1,6 +1,7 @@
 import { CircleCheck, FlaskConical, RotateCcw, Send, Zap } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { NODE_INFO, type NodeType } from "@veloxia/shared";
+import { CHANNEL_INFO, NODE_INFO, type Channel, type NodeType } from "@veloxia/shared";
+import { ChannelGlyph } from "../brand/Logo";
 import { api, errorMessage } from "../../lib/api";
 import { cn } from "../../lib/cn";
 import type { SimulationResult, SimOutput } from "../../lib/types";
@@ -23,9 +24,24 @@ const EVENTS = [
  * Simulador ("Testar automação"): roda o motor real em modo de teste, sem enviar mensagens.
  * Com `automationId` testa uma automação; sem ele, testa qual automação ativa responderia.
  */
-export function Simulator({ automationId, defaultEvent = "dm", className, useDraft = true }: { automationId?: string; defaultEvent?: string; className?: string; useDraft?: boolean }) {
+export function Simulator({
+  automationId,
+  defaultEvent = "dm",
+  channels = ["instagram", "whatsapp"],
+  className,
+  useDraft = true,
+}: {
+  automationId?: string;
+  defaultEvent?: string;
+  /** Canais em que a automação responde (define as opções de teste). */
+  channels?: Channel[];
+  className?: string;
+  useDraft?: boolean;
+}) {
   const [message, setMessage] = useState("");
   const [event, setEvent] = useState(defaultEvent);
+  const [channel, setChannel] = useState<Channel>(channels[0] ?? "instagram");
+  const channelKey = channels.join(",");
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState<SimulationResult | null>(null);
@@ -35,20 +51,24 @@ export function Simulator({ automationId, defaultEvent = "dm", className, useDra
     setEvent(defaultEvent);
   }, [defaultEvent]);
   useEffect(() => {
+    setChannel((c) => (channelKey.split(",").includes(c) ? c : (channelKey.split(",")[0] as Channel)));
+  }, [channelKey]);
+  const effectiveEvent = channel === "whatsapp" ? "dm" : event;
+  useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [entries]);
 
   const run = async (text: string, reply?: { text?: string; payload?: string }) => {
     setLoading(true);
-    setEntries((e) => [...e, { kind: "user", text: text || (event === "story_mention" ? "📣 (menção em Story)" : "") }]);
+    setEntries((e) => [...e, { kind: "user", text: text || (effectiveEvent === "story_mention" ? "📣 (menção em Story)" : "") }]);
     try {
       const body =
         reply && pending?.state
-          ? { message: text, event, useDraft, resume: { state: pending.state, reply } }
-          : { message: text, event, useDraft };
+          ? { message: text, event: effectiveEvent, channel, useDraft, resume: { state: pending.state, reply } }
+          : { message: text, event: effectiveEvent, channel, useDraft };
       const { result } = automationId
         ? await api.post<{ result: SimulationResult }>(`/automations/${automationId}/test`, body)
-        : await api.post<{ result: SimulationResult }>(`/automations/test-match`, { message: text, event });
+        : await api.post<{ result: SimulationResult }>(`/automations/test-match`, { message: text, event: effectiveEvent, channel });
       setEntries((e) => [...e, { kind: "result", result, resumed: !!reply }]);
       setPending(result.status === "waiting" ? result : null);
     } catch (err) {
@@ -60,7 +80,7 @@ export function Simulator({ automationId, defaultEvent = "dm", className, useDra
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (!message.trim() && event !== "story_mention") return;
+    if (!message.trim() && effectiveEvent !== "story_mention") return;
     const text = message.trim();
     setMessage("");
     if (pending?.waiting) run(text, { text });
@@ -81,7 +101,25 @@ export function Simulator({ automationId, defaultEvent = "dm", className, useDra
           <Badge tone="gray">nada é enviado</Badge>
         </div>
         <div className="flex items-center gap-2">
-          {!pending && (
+          {!pending && channels.length > 1 && (
+            <Segmented
+              value={channel}
+              onChange={(v) => {
+                setChannel(v);
+                reset();
+              }}
+              items={channels.map((c) => ({
+                value: c,
+                label: (
+                  <span className="inline-flex items-center gap-1">
+                    <ChannelGlyph channel={c} className="size-3.5" />
+                    {CHANNEL_INFO[c].label}
+                  </span>
+                ),
+              }))}
+            />
+          )}
+          {!pending && channel === "instagram" && (
             <Segmented
               value={event}
               onChange={(v) => {
@@ -101,7 +139,7 @@ export function Simulator({ automationId, defaultEvent = "dm", className, useDra
       <div className="scrollbar-thin min-h-48 flex-1 space-y-3 overflow-y-auto bg-zinc-50/60 p-4">
         {entries.length === 0 && (
           <p className="py-8 text-center text-sm text-zinc-500">
-            Digite uma mensagem como se fosse um seguidor, por exemplo: <span className="font-medium text-zinc-700">“Quero o link”</span>.
+            Digite uma mensagem como se fosse {channel === "whatsapp" ? "um cliente no WhatsApp" : "um seguidor"}, por exemplo: <span className="font-medium text-zinc-700">“Quero o link”</span>.
           </p>
         )}
         {entries.map((entry, i) => {
@@ -170,7 +208,7 @@ export function Simulator({ automationId, defaultEvent = "dm", className, useDra
         <Input
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder={pending?.waiting?.type === "capture" ? "Resposta do contato…" : event === "story_mention" ? "Menções não têm texto — clique em enviar" : "Mensagem de teste…"}
+          placeholder={pending?.waiting?.type === "capture" ? "Resposta do contato…" : effectiveEvent === "story_mention" ? "Menções não têm texto — clique em enviar" : "Mensagem de teste…"}
           aria-label="Mensagem de teste"
         />
         <Button type="submit" loading={loading} icon={<Send className="size-4" />}>

@@ -1,4 +1,4 @@
-name: Gatilho CI
+name: Veloxia CI
 
 on:
   push:

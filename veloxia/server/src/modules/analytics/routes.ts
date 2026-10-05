@@ -202,7 +202,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
       recentActivity,
       latestConversations,
       onboarding: {
-        instagramConnected: accounts.n > 0,
+        channelConnected: accounts.n > 0,
         automationCreated: totalAutomations.n > 0,
         automationActive: activeAutomations.n > 0,
         firstMessageReceived: !!firstMessage,

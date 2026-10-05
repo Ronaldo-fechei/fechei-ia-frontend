@@ -228,7 +228,7 @@ export default function AutomationDetail() {
         </div>
 
         <div className="space-y-6">
-          <Simulator automationId={a.id} defaultEvent={a.triggerEvent === "new_follower" ? "dm" : a.triggerEvent} className="h-[480px]" />
+          <Simulator automationId={a.id} channels={a.channels} defaultEvent={a.triggerEvent === "new_follower" ? "dm" : a.triggerEvent} className="h-[480px]" />
           <Card>
             <CardTitle title="Palavras mais acionadas" />
             <BarList items={(stats.data?.keywords ?? []).map((k) => ({ label: k.keyword.toUpperCase(), value: k.n }))} emptyText="Nenhuma palavra acionada ainda." />

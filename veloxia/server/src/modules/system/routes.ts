@@ -48,7 +48,7 @@ export async function systemRoutes(app: FastifyInstance) {
           appConfigured: whatsappConfigured(),
           webhookConfigured: whatsappWebhookConfigured(),
           webhookUrl: urls.whatsappWebhook(),
-          webhookFields: ["messages", "message_template_status_update"],
+          webhookFields: ["messages", "message_template_status_update", "smb_message_echoes"],
           permissions: ["whatsapp_business_management", "whatsapp_business_messaging"],
           rates: whatsappRates(),
         },

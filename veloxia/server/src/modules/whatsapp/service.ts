@@ -8,7 +8,7 @@
  */
 import { randomInt } from "node:crypto";
 import { and, eq, gte, isNull, like, ne, sql } from "drizzle-orm";
-import { APP_NAME, formatPhone, phoneDigits, WHATSAPP_PRICING_CATEGORIES, type WhatsAppPricingCategory } from "@veloxia/shared";
+import { APP_NAME, formatPhone, phoneDigits, templateParamCount, WHATSAPP_PRICING_CATEGORIES, type WhatsAppPricingCategory } from "@veloxia/shared";
 import { whatsappConfigured, whatsappRates } from "../../config/env";
 import { db } from "../../db/client";
 import { analyticsDaily, channelAccounts, whatsappTemplates } from "../../db/schema";
@@ -164,7 +164,7 @@ export function publicTemplate(t: typeof whatsappTemplates.$inferSelect) {
     bodyText: t.bodyText,
     headerFormat: header ? String(header.format ?? "TEXT").toUpperCase() : null,
     headerText: header && typeof header.text === "string" ? header.text : null,
-    paramsCount: (t.bodyText.match(/\{\{\d+\}\}/g) ?? []).length,
+    paramsCount: templateParamCount(t.bodyText),
     components: t.components,
     updatedAt: t.updatedAt,
   };

@@ -2,7 +2,7 @@
 import { and, desc, eq, ilike, lt, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { CHANNEL_INFO, CHANNELS, LIMITS, type Channel } from "@veloxia/shared";
+import { CHANNEL_INFO, CHANNELS, LIMITS, templateParamCount, type Channel } from "@veloxia/shared";
 import { env } from "../../config/env";
 import { db } from "../../db/client";
 import { automationExecutions, automations, channelAccounts, contacts, contactTags, conversations, messages, tags, users, whatsappTemplates } from "../../db/schema";
@@ -249,7 +249,7 @@ export async function inboxRoutes(app: FastifyInstance) {
         .where(and(eq(whatsappTemplates.id, input.template.templateId), eq(whatsappTemplates.channelAccountId, account.id)))
         .limit(1);
       if (!tpl || tpl.status !== "APPROVED") throw badRequest("Escolha um modelo aprovado pela Meta para este número.");
-      const expected = (tpl.bodyText.match(/\{\{\d+\}\}/g) ?? []).length;
+      const expected = templateParamCount(tpl.bodyText);
       if (input.template.params.filter((p) => p.trim()).length < expected) throw badRequest("Preencha todas as variáveis do modelo.");
       let previewText = tpl.bodyText;
       input.template.params.forEach((value, i) => (previewText = previewText.split(`{{${i + 1}}}`).join(value)));

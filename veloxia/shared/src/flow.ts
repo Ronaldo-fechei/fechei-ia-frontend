@@ -6,7 +6,7 @@
  * os demais blocos são executados em sequência seguindo as conexões.
  */
 import { z } from "zod";
-import { CHANNELS, CHANNEL_INFO, type Channel } from "./channels";
+import { CHANNELS, CHANNEL_INFO, templateParamCount, type Channel } from "./channels";
 import { MATCH_TYPES, type KeywordRule } from "./keywords";
 
 /* ------------------------------------------------------------------------ */
@@ -618,7 +618,7 @@ export function validateFlow(flow: Flow): FlowValidation {
         const d = node.data as NodeDataMap["whatsapp_template"];
         if (!d.templateName) errors.push({ nodeId: node.id, message: "Escolha um modelo aprovado do WhatsApp." });
         if (d.bodyParams.length > LIMITS.maxTemplateParams) errors.push({ nodeId: node.id, message: "Muitas variáveis no modelo." });
-        const expected = (d.bodyText.match(/\{\{\d+\}\}/g) ?? []).length;
+        const expected = templateParamCount(d.bodyText);
         if (expected > 0 && d.bodyParams.filter((p) => p.trim()).length < expected)
           errors.push({ nodeId: node.id, message: "Preencha todas as variáveis do modelo do WhatsApp." });
         break;

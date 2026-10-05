@@ -12,6 +12,7 @@ import {
   LogOut,
   Menu as MenuIcon,
   MessagesSquare,
+  Radio,
   Settings,
   Shield,
   UserRound,
@@ -23,10 +24,11 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { api } from "../../lib/api";
 import { cn } from "../../lib/cn";
 import { relativeTime } from "../../lib/format";
-import type { InstagramAccount, NotificationItem } from "../../lib/types";
+import type { NotificationItem } from "../../lib/types";
 import { useLiveEvents } from "../../lib/useLiveEvents";
 import { useAuth, useMe } from "../../hooks/useAuth";
-import { InstagramGlyph, Logo } from "../brand/Logo";
+import { useChannelAccounts } from "../../hooks/useChannels";
+import { ChannelGlyph, Logo } from "../brand/Logo";
 import { Avatar, Badge, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "../ui";
 
 interface NavItem {
@@ -54,16 +56,13 @@ const NAV: NavItem[] = [
   { to: "/app/palavras-chave", label: "Palavras-chave", icon: <KeyRound /> },
   { to: "/app/conversas", label: "Conversas", icon: <MessagesSquare /> },
   { to: "/app/contatos", label: "Contatos", icon: <Contact /> },
-  { to: "/app/instagram", label: "Instagram", icon: <InstagramGlyph /> },
+  { to: "/app/canais", label: "Canais", icon: <Radio /> },
   { to: "/app/modelos", label: "Modelos", icon: <LayoutTemplate /> },
   { to: "/app/analytics", label: "Analytics", icon: <ChartColumn /> },
   { to: "/app/configuracoes", label: "Configurações", icon: <Settings /> },
   { to: "/app/ajuda", label: "Ajuda", icon: <LifeBuoy /> },
 ];
 
-export function useInstagramAccounts() {
-  return useQuery({ queryKey: ["instagram-accounts"], queryFn: () => api.get<{ accounts: InstagramAccount[] }>("/instagram/accounts"), staleTime: 60_000 });
-}
 
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const { pathname } = useLocation();
@@ -114,8 +113,8 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
 function PlanBox() {
   const me = useMe();
-  const limit = me.plan.limits.messages_per_month;
-  const used = me.usage.messages_per_month;
+  const limit = me.plan.limits.active_contacts_per_month;
+  const used = me.usage.active_contacts_per_month;
   return (
     <Link to="/app/configuracoes?aba=plano" className="mx-3 block rounded-xl bg-white/5 p-3 text-xs text-zinc-300 hover:bg-white/10">
       <div className="flex items-center justify-between">
@@ -128,11 +127,11 @@ function PlanBox() {
             <div className="h-full rounded-full bg-brand-400" style={{ width: `${Math.min(100, (used / limit) * 100)}%` }} />
           </div>
           <p className="mt-1.5">
-            {used.toLocaleString("pt-BR")} de {limit.toLocaleString("pt-BR")} mensagens no mês
+            {used.toLocaleString("pt-BR")} de {limit.toLocaleString("pt-BR")} contatos ativos no mês
           </p>
         </>
       ) : (
-        <p className="mt-1">Mensagens ilimitadas</p>
+        <p className="mt-1">Contatos ilimitados</p>
       )}
     </Link>
   );
@@ -169,28 +168,30 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
 }
 
 function ConnectionStatus() {
-  const { data } = useInstagramAccounts();
-  const account = data?.accounts[0];
+  const { data, accounts } = useChannelAccounts();
   if (!data) return null;
-  if (!account) {
+  if (!accounts.length) {
     return (
-      <Link to="/app/instagram" className="hidden items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 hover:border-brand-300 hover:text-brand-700 md:flex">
-        <InstagramGlyph />
-        Conectar Instagram
+      <Link to="/app/canais" className="hidden items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 hover:border-brand-300 hover:text-brand-700 md:flex">
+        <Radio className="size-4" />
+        Conectar um canal
       </Link>
     );
   }
-  const ok = account.status === "connected";
   return (
-    <Link to="/app/instagram" className="hidden items-center gap-2 rounded-lg px-2 py-1 hover:bg-zinc-100 md:flex" title="Conta do Instagram conectada">
-      <Avatar src={account.profilePictureUrl} name={account.username} size={28} />
-      <div className="text-left leading-tight">
-        <p className="text-sm font-medium text-zinc-900">@{account.username}</p>
-        <p className={cn("flex items-center gap-1 text-xs", ok ? "text-emerald-600" : "text-red-600")}>
-          <span className={cn("size-1.5 rounded-full", ok ? "bg-emerald-500" : "bg-red-500")} />
-          {ok ? "Conectado" : account.status === "token_expired" ? "Reconectar" : "Com erro"}
-        </p>
-      </div>
+    <Link to="/app/canais" className="hidden items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-zinc-100 md:flex" title="Canais conectados">
+      {accounts.slice(0, 3).map((a) => {
+        const ok = a.status === "connected";
+        return (
+          <span key={a.id} className="flex items-center gap-1.5 rounded-full bg-zinc-100 py-1 pr-2.5 pl-1.5 text-xs font-medium text-zinc-700">
+            <span className={cn("flex size-5 items-center justify-center rounded-full text-white", a.channel === "whatsapp" ? "bg-emerald-500" : "bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600")}>
+              <ChannelGlyph channel={a.channel} className="size-3" />
+            </span>
+            <span className="max-w-32 truncate">{a.channel === "whatsapp" ? a.name || a.displayHandle : a.displayHandle}</span>
+            <span className={cn("size-1.5 rounded-full", ok ? "bg-emerald-500" : "bg-red-500")} title={ok ? "Conectado" : "Reconectar"} />
+          </span>
+        );
+      })}
     </Link>
   );
 }
@@ -282,8 +283,8 @@ function AccountMenu() {
         <MenuItem icon={<UserRound />} onSelect={() => navigate("/app/configuracoes")}>
           Minha conta
         </MenuItem>
-        <MenuItem icon={<InstagramGlyph />} onSelect={() => navigate("/app/instagram")}>
-          Instagram
+        <MenuItem icon={<Radio />} onSelect={() => navigate("/app/canais")}>
+          Canais
         </MenuItem>
         <MenuItem icon={<LifeBuoy />} onSelect={() => navigate("/app/ajuda")}>
           Ajuda

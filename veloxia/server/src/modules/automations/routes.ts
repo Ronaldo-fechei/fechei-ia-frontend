@@ -117,6 +117,7 @@ export async function automationRoutes(app: FastifyInstance) {
         description: t.description,
         category: t.category,
         triggerEvent: t.triggerEvent,
+        channels: t.channels,
         highlights: t.highlights,
         preview: t.build(),
       })),

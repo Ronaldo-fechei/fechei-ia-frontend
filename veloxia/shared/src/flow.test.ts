@@ -148,3 +148,11 @@ describe("canais", () => {
     expect(validateFlow(base({ event: "dm", channels: ["whatsapp"] }, [delay], [edge])).valid).toBe(true);
   });
 });
+
+describe("templateParamCount", () => {
+  it("usa o maior índice, mesmo com variáveis repetidas", async () => {
+    const { templateParamCount } = await import("./channels");
+    expect(templateParamCount("Olá")).toBe(0);
+    expect(templateParamCount("Oi {{1}}, seu pedido {{2}} chegou. Até mais, {{1}}!")).toBe(2);
+  });
+});

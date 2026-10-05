@@ -39,9 +39,15 @@ export function useLiveEvents(enabled: boolean) {
       qc.invalidateQueries({ queryKey: ["comments"] });
     });
     on("notification.created", () => qc.invalidateQueries({ queryKey: ["notifications"] }));
-    on("instagram.updated", () => {
+    on("channels.updated", () => {
+      qc.invalidateQueries({ queryKey: ["channel-accounts"] });
       qc.invalidateQueries({ queryKey: ["instagram-accounts"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
+    });
+    on("templates.updated", () => qc.invalidateQueries({ queryKey: ["whatsapp-templates"] }));
+    on("billing.updated", () => {
+      qc.invalidateQueries({ queryKey: ["billing"] });
+      qc.invalidateQueries({ queryKey: ["me"] });
     });
     return () => source.close();
   }, [enabled, qc]);

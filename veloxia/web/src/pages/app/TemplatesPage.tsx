@@ -3,7 +3,8 @@ import { CircleCheck, LayoutTemplate } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { NODE_INFO, type Flow, type NodeType } from "@veloxia/shared";
+import { CHANNEL_INFO, NODE_INFO, type Channel, type Flow, type NodeType } from "@veloxia/shared";
+import { ChannelGlyph } from "../../components/brand/Logo";
 import { TriggerBadge } from "../../components/automation/badges";
 import { Badge, Button, Card, EmptyState, PageHeader, Segmented, Skeleton } from "../../components/ui";
 import { api, errorMessage } from "../../lib/api";
@@ -14,6 +15,7 @@ interface Template {
   description: string;
   category: string;
   triggerEvent: string;
+  channels: Channel[];
   highlights: string[];
   preview: Flow;
 }
@@ -63,7 +65,14 @@ export default function TemplatesPage() {
                   <h3 className="font-semibold">{t.name}</h3>
                   <Badge tone="brand">{t.category}</Badge>
                 </div>
-                <TriggerBadge event={t.triggerEvent} />
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <TriggerBadge event={t.triggerEvent} />
+                  {t.channels.map((c) => (
+                    <Badge key={c} tone={c === "whatsapp" ? "green" : "gray"}>
+                      <ChannelGlyph channel={c} className="size-3" /> {CHANNEL_INFO[c].label}
+                    </Badge>
+                  ))}
+                </div>
                 <p className="text-sm text-zinc-600">{t.description}</p>
                 <ul className="space-y-1">
                   {t.highlights.map((h) => (

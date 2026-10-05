@@ -182,7 +182,7 @@ function Customers() {
 }
 
 function Accounts() {
-  const { data, isLoading } = useQuery({ queryKey: ["admin", "accounts"], queryFn: () => api.get<{ accounts: { id: string; username: string; status: string; webhookError: string | null; lastError: string | null; lastWebhookAt: string | null; tokenExpiresAt: string | null }[] }>("/admin/instagram-accounts") });
+  const { data, isLoading } = useQuery({ queryKey: ["admin", "accounts"], queryFn: () => api.get<{ accounts: { id: string; channel: "instagram" | "whatsapp"; handle: string; status: string; webhookError: string | null; lastError: string | null; lastWebhookAt: string | null; tokenExpiresAt: string | null }[] }>("/admin/channel-accounts") });
   if (isLoading) return <Skeleton className="h-64" />;
   return (
     <Card padded={false} className="overflow-x-auto">
@@ -199,7 +199,7 @@ function Accounts() {
         <tbody className="divide-y divide-zinc-100">
           {data?.accounts.map((a) => (
             <tr key={a.id}>
-              <td className="px-4 py-2.5 font-medium">@{a.username}</td>
+              <td className="px-4 py-2.5 font-medium">{a.channel === "whatsapp" ? `WhatsApp · ${a.handle}` : `@${a.handle}`}</td>
               <td className="px-4 py-2.5">
                 <Badge tone={a.status === "connected" ? "green" : "red"}>{a.status}</Badge>
               </td>
@@ -219,7 +219,7 @@ export default function AdminPage() {
   const [tab, setTab] = useState<Tab>("erros");
   const overview = useQuery({
     queryKey: ["admin", "overview"],
-    queryFn: () => api.get<{ users: number; workspaces: number; instagramAccounts: number; errors24h: number; jobs: { status: string; n: number }[]; webhooks24h: { status: string; n: number }[] }>("/admin/overview"),
+    queryFn: () => api.get<{ users: number; workspaces: number; instagramAccounts: number; whatsappAccounts: number; errors24h: number; jobs: { status: string; n: number }[]; webhooks24h: { status: string; n: number }[] }>("/admin/overview"),
     enabled: me.user.role === "admin",
   });
   if (me.user.role !== "admin") return <Navigate to="/app" replace />;
@@ -229,10 +229,11 @@ export default function AdminPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Administração" description="Detalhes técnicos: erros, fila de processamento, webhooks e clientes." />
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
         <StatCard label="Usuários" value={formatNumber(o?.users)} loading={overview.isLoading} />
         <StatCard label="Espaços" value={formatNumber(o?.workspaces)} loading={overview.isLoading} />
         <StatCard label="Contas IG ativas" value={formatNumber(o?.instagramAccounts)} loading={overview.isLoading} />
+        <StatCard label="Números WhatsApp" value={formatNumber(o?.whatsappAccounts)} loading={overview.isLoading} />
         <StatCard label="Erros (24h)" value={formatNumber(o?.errors24h)} loading={overview.isLoading} />
         <StatCard label="Jobs mortos / webhooks falhos" value={`${formatNumber(dead)} / ${formatNumber(failedWebhooks)}`} loading={overview.isLoading} />
       </div>

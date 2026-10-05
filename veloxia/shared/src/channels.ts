@@ -110,3 +110,8 @@ export function formatPhone(phone: string | null | undefined): string {
   }
   return `+${d}`;
 }
+
+/** Quantidade de variáveis de um modelo do WhatsApp: o maior índice {{n}} (podem se repetir). */
+export function templateParamCount(bodyText: string): number {
+  return Math.max(0, ...(bodyText.match(/\{\{\d+\}\}/g) ?? []).map((m) => Number(m.replace(/\D/g, ""))));
+}

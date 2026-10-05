@@ -3,14 +3,15 @@ import { Check, Laptop, Pencil, Plus, Trash } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { COOLDOWN_PRESETS, FIELD_TYPES, TONE_LABELS, TONES, type PlanLimitKey, type Tone } from "@veloxia/shared";
+import { COOLDOWN_PRESETS, FIELD_TYPES, PLAN_LIMIT_LABELS, TONE_LABELS, TONES, formatBRL, type BillingCycle, type PlanLimitKey, type Tone } from "@veloxia/shared";
+import { CycleToggle, PlanCards, PlanPrice } from "../../components/billing/PlanCards";
 import { Badge, Button, Callout, Card, CardTitle, Field, IconButton, Input, Modal, ProgressBar, Select, Skeleton, Tabs, TagPill, Textarea, useConfirm } from "../../components/ui";
 import { PageHeader } from "../../components/ui";
 import { useAuth, useMe } from "../../hooks/useAuth";
 import { api, errorMessage } from "../../lib/api";
 import { cn } from "../../lib/cn";
 import { formatDateTime, formatMoney, formatNumber, relativeTime } from "../../lib/format";
-import type { FieldItem, TagItem } from "../../lib/types";
+import type { BillingInfo, FieldItem, PublicPlan, TagItem } from "../../lib/types";
 
 type Tab = "perfil" | "seguranca" | "tom" | "tags" | "campos" | "plano" | "conta";
 
@@ -349,98 +350,223 @@ function FieldsTab() {
   );
 }
 
-interface Billing {
-  currentPlanId: string;
-  subscription: { status: string; trialEndsAt: string | null; currentPeriodEnd: string | null } | null;
-  usage: Record<PlanLimitKey, number>;
-  plans: { id: string; name: string; description: string; priceCents: number; currency: string; interval: string; limits: Partial<Record<PlanLimitKey, number | null>>; features: Record<string, boolean> }[];
-  payments: { enabled: boolean; message: string; supportEmail: string | null };
-}
-
-const LIMIT_LABELS: Record<PlanLimitKey, string> = {
-  instagram_accounts: "Contas do Instagram",
-  active_automations: "Automações ativas",
-  contacts: "Contatos",
-  messages_per_month: "Mensagens automáticas / mês",
-  ai_generations_per_month: "Gerações com IA / mês",
+const SUB_STATUS: Record<string, { label: string; tone: "green" | "yellow" | "red" | "gray" }> = {
+  active: { label: "Ativa", tone: "green" },
+  trialing: { label: "Em teste", tone: "green" },
+  past_due: { label: "Pagamento pendente", tone: "yellow" },
+  canceled: { label: "Cancelada", tone: "gray" },
+  expired: { label: "Expirada", tone: "red" },
 };
-const FEATURE_LABELS: Record<string, string> = { flow_builder: "Construtor visual", advanced_analytics: "Analytics avançado", ai: "IA para criar automações", comment_automations: "Comentário → DM", remove_branding: "Sem marca do app" };
+const PAYMENT_STATUS: Record<string, string> = {
+  pending: "Aguardando pagamento",
+  approved: "Pago",
+  rejected: "Recusado",
+  cancelled: "Cancelado",
+  refunded: "Reembolsado",
+  charged_back: "Estornado",
+  in_process: "Em análise",
+  authorized: "Autorizado",
+};
 
 function PlanTab() {
-  const { data, isLoading } = useQuery({ queryKey: ["billing"], queryFn: () => api.get<Billing>("/billing") });
-  const [upgrade, setUpgrade] = useState<string | null>(null);
+  const qc = useQueryClient();
+  const me = useMe();
+  const confirm = useConfirm();
+  const [params, setParams] = useSearchParams();
+  const { data, isLoading } = useQuery({ queryKey: ["billing"], queryFn: () => api.get<BillingInfo>("/billing") });
+  const [cycle, setCycle] = useState<BillingCycle>("monthly");
+  const [choosing, setChoosing] = useState<PublicPlan | null>(null);
+  const [payerEmail, setPayerEmail] = useState(me.user.email);
+  const [loading, setLoading] = useState(false);
+  const isOwner = me.workspace.role === "owner";
+
+  useEffect(() => {
+    if (params.get("checkout") === "retorno") {
+      toast.info("Pagamento recebido pelo Mercado Pago. O plano é ativado assim que a confirmação chegar — normalmente em poucos segundos.");
+      qc.invalidateQueries({ queryKey: ["billing"] });
+      qc.invalidateQueries({ queryKey: ["me"] });
+      params.delete("checkout");
+      setParams(params, { replace: true });
+    }
+  }, [params, setParams, qc]);
+
   if (isLoading || !data) return <Skeleton className="h-80" />;
   const current = data.plans.find((p) => p.id === data.currentPlanId);
+  const sub = data.subscription;
+  const paid = sub && sub.provider === "mercadopago" && current && current.priceCents > 0;
+
+  const checkout = async () => {
+    if (!choosing) return;
+    setLoading(true);
+    try {
+      const { url } = await api.post<{ url: string }>("/billing/checkout", { planId: choosing.id, cycle, payerEmail });
+      window.location.assign(url);
+    } catch (err) {
+      toast.error(errorMessage(err));
+      setLoading(false);
+    }
+  };
+  const cancel = async () => {
+    const ok = await confirm({
+      title: "Cancelar a assinatura?",
+      description: sub?.currentPeriodEnd
+        ? `Você continua com o plano ${current?.name} até ${formatDateTime(sub.currentPeriodEnd)}. Depois disso a conta volta para o plano gratuito.`
+        : "As próximas cobranças são canceladas no Mercado Pago e a conta volta para o plano gratuito no fim do período pago.",
+      confirmLabel: "Cancelar assinatura",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.post("/billing/cancel");
+      qc.invalidateQueries({ queryKey: ["billing"] });
+      toast.success("Assinatura cancelada. Nenhuma nova cobrança será feita.");
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Card>
         <CardTitle
-          title={`Plano atual: ${current?.name ?? data.currentPlanId}`}
-          description={data.subscription?.status === "trialing" && data.subscription.trialEndsAt ? `Período de teste até ${formatDateTime(data.subscription.trialEndsAt)}` : current?.description}
-        />
-        <div className="grid gap-5 sm:grid-cols-2">
-          {(Object.keys(LIMIT_LABELS) as PlanLimitKey[]).map((k) => {
-            const limit = current?.limits[k];
-            const used = data.usage[k] ?? 0;
-            return (
-              <div key={k}>
-                <div className="mb-1.5 flex justify-between text-sm">
-                  <span className="text-zinc-600">{LIMIT_LABELS[k]}</span>
-                  <span className="font-medium tabular-nums">
-                    {formatNumber(used)} / {limit === null || limit === undefined ? "ilimitado" : formatNumber(limit)}
-                  </span>
-                </div>
-                <ProgressBar value={used} max={limit ?? null} />
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-      <div className="grid gap-4 lg:grid-cols-3">
-        {data.plans.map((p) => (
-          <Card key={p.id} className={cn("flex flex-col gap-4", p.id === data.currentPlanId && "ring-2 ring-brand-500")}>
-            <div>
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">{p.name}</h3>
-                {p.id === data.currentPlanId && <Badge tone="brand">Atual</Badge>}
-              </div>
-              <p className="mt-1 text-sm text-zinc-500">{p.description}</p>
-              <p className="mt-3 text-2xl font-semibold">
-                {p.priceCents ? formatMoney(p.priceCents, p.currency) : "Grátis"}
-                {p.priceCents > 0 && <span className="text-sm font-normal text-zinc-500">/{p.interval === "year" ? "ano" : "mês"}</span>}
-              </p>
-            </div>
-            <ul className="space-y-1.5 text-sm">
-              {(Object.keys(LIMIT_LABELS) as PlanLimitKey[]).map((k) => (
-                <li key={k} className="flex justify-between gap-2">
-                  <span className="text-zinc-600">{LIMIT_LABELS[k]}</span>
-                  <span className="font-medium">{p.limits[k] === null || p.limits[k] === undefined ? "Ilimitado" : formatNumber(p.limits[k])}</span>
-                </li>
-              ))}
-              {Object.entries(FEATURE_LABELS).map(([k, label]) => (
-                <li key={k} className={cn("flex items-center gap-1.5", p.features[k] === false ? "text-zinc-400 line-through" : "text-zinc-700")}>
-                  <Check className={cn("size-4", p.features[k] === false ? "text-zinc-300" : "text-emerald-500")} />
-                  {label}
-                </li>
-              ))}
-            </ul>
-            {p.id !== data.currentPlanId && (
-              <Button variant="secondary" className="mt-auto" onClick={() => setUpgrade(p.name)}>
-                Mudar para {p.name}
+          title={
+            <span className="flex flex-wrap items-center gap-2">
+              Plano atual: {current?.name ?? data.currentPlanId}
+              {sub && current && current.priceCents > 0 && <Badge tone={SUB_STATUS[sub.status]?.tone ?? "gray"}>{SUB_STATUS[sub.status]?.label ?? sub.status}</Badge>}
+            </span>
+          }
+          description={
+            sub?.status === "trialing" && sub.trialEndsAt
+              ? `Período de teste até ${formatDateTime(sub.trialEndsAt)}`
+              : paid && sub.currentPeriodEnd
+                ? sub.status === "canceled" || sub.cancelAtPeriodEnd
+                  ? `Cancelada — o plano vale até ${formatDateTime(sub.currentPeriodEnd)}.`
+                  : `${sub.billingCycle === "annual" ? "Anual" : "Mensal"}${sub.amountCents ? ` · ${formatBRL(sub.amountCents)}` : ""} · válido até ${formatDateTime(sub.currentPeriodEnd)}${sub.promoEndsAt ? ` · preço de lançamento até ${formatDateTime(sub.promoEndsAt)}` : ""}`
+                : current?.description
+          }
+          action={
+            paid && isOwner && sub.status !== "canceled" && !sub.cancelAtPeriodEnd ? (
+              <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50" onClick={cancel}>
+                Cancelar assinatura
               </Button>
-            )}
-          </Card>
-        ))}
+            ) : undefined
+          }
+        />
+        {sub?.status === "past_due" && (
+          <Callout tone="warning" className="mb-5" title="Não conseguimos confirmar o último pagamento">
+            O Mercado Pago tenta cobrar de novo automaticamente. Confira o cartão na sua conta do Mercado Pago para não perder o plano.
+          </Callout>
+        )}
+        <div className="grid gap-5 sm:grid-cols-2">
+          {(Object.keys(PLAN_LIMIT_LABELS) as PlanLimitKey[])
+            .filter((k) => k !== "flow_max_nodes" && current?.limits[k] !== 0)
+            .map((k) => {
+              const limit = current?.limits[k];
+              const used = data.usage[k] ?? 0;
+              return (
+                <div key={k}>
+                  <div className="mb-1.5 flex justify-between text-sm">
+                    <span className="text-zinc-600">{PLAN_LIMIT_LABELS[k]}</span>
+                    <span className="font-medium tabular-nums">
+                      {formatNumber(used)} / {limit === null || limit === undefined ? "ilimitado" : formatNumber(limit)}
+                    </span>
+                  </div>
+                  <ProgressBar value={used} max={limit ?? null} />
+                </div>
+              );
+            })}
+        </div>
+        <p className="mt-4 text-xs text-zinc-500">
+          Contato ativo = pessoa que mandou mensagem para você no mês, em qualquer canal. As mensagens do WhatsApp são cobradas pela Meta, direto no seu
+          cartão cadastrado na Meta — não estão incluídas no plano.
+        </p>
+      </Card>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-lg font-semibold">Planos</h2>
+        <CycleToggle value={cycle} onChange={setCycle} />
       </div>
-      <Modal open={!!upgrade} onOpenChange={(o) => !o && setUpgrade(null)} title={`Mudar para o plano ${upgrade}`} size="sm">
+      {!data.payments.enabled && (
         <Callout tone="info">
           {data.payments.message}
           {data.payments.supportEmail && (
-            <a className="mt-2 block font-medium underline" href={`mailto:${data.payments.supportEmail}?subject=${encodeURIComponent(`Quero o plano ${upgrade}`)}`}>
+            <a className="ml-1 font-medium underline" href={`mailto:${data.payments.supportEmail}`}>
               {data.payments.supportEmail}
             </a>
           )}
         </Callout>
+      )}
+      <PlanCards
+        plans={data.plans}
+        cycle={cycle}
+        promoEligible={data.promoEligible}
+        currentPlanId={data.currentPlanId}
+        action={(p) =>
+          p.id === data.currentPlanId || p.priceCents <= 0 || !data.payments.enabled || !isOwner ? null : (
+            <Button className="w-full" variant={p.highlighted ? "primary" : "secondary"} onClick={() => setChoosing(p)} disabled={cycle === "annual" && !p.annualPriceCents}>
+              {current && current.priceCents > 0 ? `Mudar para ${p.name}` : `Assinar ${p.name}`}
+            </Button>
+          )
+        }
+      />
+
+      {data.history.length > 0 && (
+        <Card padded={false} className="overflow-x-auto">
+          <div className="px-5 pt-5">
+            <CardTitle title="Histórico de pagamentos" />
+          </div>
+          <table className="w-full text-sm">
+            <thead className="border-y border-zinc-200 bg-zinc-50 text-left text-xs text-zinc-500 uppercase">
+              <tr>
+                <th className="px-5 py-2.5">Data</th>
+                <th className="px-5 py-2.5">Plano</th>
+                <th className="px-5 py-2.5">Valor</th>
+                <th className="px-5 py-2.5">Situação</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100">
+              {data.history.map((h) => (
+                <tr key={h.id}>
+                  <td className="px-5 py-2.5">{formatDateTime(h.paidAt ?? h.createdAt)}</td>
+                  <td className="px-5 py-2.5">
+                    {data.plans.find((p) => p.id === h.planId)?.name ?? h.planId} · {h.billingCycle === "annual" ? "anual" : "mensal"}
+                  </td>
+                  <td className="px-5 py-2.5 tabular-nums">{formatBRL(h.amountCents)}</td>
+                  <td className="px-5 py-2.5">{PAYMENT_STATUS[h.status] ?? h.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      <Modal
+        open={!!choosing}
+        onOpenChange={(o) => !o && setChoosing(null)}
+        title={`Assinar o plano ${choosing?.name ?? ""}`}
+        size="sm"
+        footer={
+          <Button onClick={checkout} loading={loading} disabled={!payerEmail}>
+            Ir para o Mercado Pago
+          </Button>
+        }
+      >
+        {choosing && (
+          <div className="space-y-4">
+            <PlanPrice plan={choosing} cycle={cycle} promoEligible={data.promoEligible} />
+            <p className="text-sm text-zinc-600">
+              {cycle === "annual"
+                ? "Pagamento único para 12 meses, por PIX, cartão ou boleto, no ambiente seguro do Mercado Pago."
+                : "Assinatura mensal no cartão, renovada automaticamente pelo Mercado Pago. Você pode cancelar aqui a qualquer momento."}
+            </p>
+            <Field label="E-mail da sua conta do Mercado Pago" hint="O Mercado Pago pede que seja o mesmo e-mail usado para pagar.">
+              <Input type="email" value={payerEmail} onChange={(e) => setPayerEmail(e.target.value)} />
+            </Field>
+            {current && current.priceCents > 0 && (
+              <Callout tone="info">Ao confirmar o novo plano, a assinatura anterior é cancelada automaticamente no Mercado Pago.</Callout>
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   );

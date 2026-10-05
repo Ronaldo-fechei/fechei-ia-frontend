@@ -200,7 +200,7 @@ describe("stories, simulador, palavras-chave, dashboard e analytics", () => {
     expect(d.cards.activeAutomations.value).toBe(1);
     expect(d.cards.responseRate.value).toBe(50);
     expect(d.topAutomations[0].name).toBe("Link");
-    expect(d.onboarding).toMatchObject({ instagramConnected: true, automationActive: true, firstMessageReceived: true });
+    expect(d.onboarding).toMatchObject({ channelConnected: true, automationActive: true, firstMessageReceived: true });
 
     const a = (await api(s, "GET", "/api/analytics?range=7d")).json();
     expect(a.totals.messages_in).toBe(2);

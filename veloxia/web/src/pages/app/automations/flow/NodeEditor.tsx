@@ -1,13 +1,16 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Plus, Trash, X } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import {
+  CHANNEL_INFO,
   CONDITION_RULE_LABELS,
   DELAY_PRESETS,
   LIMITS,
   NODE_INFO,
   TRIGGER_EVENT_INFO,
+  type Channel,
   type ConditionRule,
   type FlowNode,
   type NodeDataMap,
@@ -17,10 +20,12 @@ import { ImageField } from "../../../../components/automation/ImageField";
 import { KeywordEditor } from "../../../../components/automation/KeywordEditor";
 import { MediaPicker } from "../../../../components/automation/MediaPicker";
 import { MessageEditor, useFields } from "../../../../components/automation/MessageEditor";
-import { Button, Callout, Checkbox, Field, Input, Select, Switch } from "../../../../components/ui";
+import { Button, Callout, Checkbox, Field, Input, Select, Switch, Textarea } from "../../../../components/ui";
 import { api, errorMessage } from "../../../../lib/api";
 import { cn } from "../../../../lib/cn";
-import type { TagItem } from "../../../../lib/types";
+import { ChannelGlyph } from "../../../../components/brand/Logo";
+import { useChannelAccounts } from "../../../../hooks/useChannels";
+import type { TagItem, WhatsAppTemplate } from "../../../../lib/types";
 import { newId } from "./convert";
 
 export function useTags() {
@@ -166,12 +171,23 @@ function RuleEditor({ rule, onChange, onRemove }: { rule: ConditionRule; onChang
   );
 }
 
-function DelayEditor({ seconds, onChange }: { seconds: number; onChange: (s: number) => void }) {
-  const unit = seconds % 3600 === 0 ? 3600 : seconds % 60 === 0 ? 60 : 1;
+function DelayEditor({ seconds, onChange, max }: { seconds: number; onChange: (s: number) => void; max: number }) {
+  const unit = seconds % 86400 === 0 ? 86400 : seconds % 3600 === 0 ? 3600 : seconds % 60 === 0 ? 60 : 1;
+  const clamp = (v: number) => Math.max(1, Math.min(max, v));
+  const presets = [
+    ...DELAY_PRESETS,
+    ...(max > LIMITS.maxDelaySeconds
+      ? [
+          { seconds: 86400, label: "1 dia" },
+          { seconds: 3 * 86400, label: "3 dias" },
+          { seconds: 7 * 86400, label: "7 dias" },
+        ]
+      : []),
+  ];
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-1.5">
-        {DELAY_PRESETS.map((p) => (
+        {presets.map((p) => (
           <button
             key={p.seconds}
             type="button"
@@ -182,15 +198,175 @@ function DelayEditor({ seconds, onChange }: { seconds: number; onChange: (s: num
           </button>
         ))}
       </div>
-      <Field label="Tempo personalizado" hint="Máximo de 23 horas (a janela de resposta da Meta é de 24h).">
+      <Field
+        label="Tempo personalizado"
+        hint={
+          max > LIMITS.maxDelaySeconds
+            ? "Até 30 dias. Depois de 24h sem resposta do contato, o WhatsApp só aceita modelos aprovados — use o bloco “Modelo do WhatsApp” em seguida."
+            : "Máximo de 23 horas (a janela de resposta da Meta é de 24h)."
+        }
+      >
         <div className="flex gap-2">
-          <Input type="number" min={1} value={Math.round(seconds / unit)} onChange={(e) => onChange(Math.max(1, Math.min(LIMITS.maxDelaySeconds, (Number(e.target.value) || 1) * unit)))} />
-          <Select value={unit} onChange={(e) => onChange(Math.min(LIMITS.maxDelaySeconds, Math.round(seconds / unit) * Number(e.target.value)))} className="w-36">
+          <Input type="number" min={1} value={Math.round(seconds / unit)} onChange={(e) => onChange(clamp((Number(e.target.value) || 1) * unit))} />
+          <Select value={unit} onChange={(e) => onChange(clamp(Math.round(seconds / unit) * Number(e.target.value)))} className="w-36">
             <option value={1}>segundos</option>
             <option value={60}>minutos</option>
             <option value={3600}>horas</option>
+            {max > LIMITS.maxDelaySeconds && <option value={86400}>dias</option>}
           </Select>
         </div>
+      </Field>
+    </div>
+  );
+}
+
+function TriggerChannels({ event, value, onChange }: { event: TriggerEvent; value: Channel[]; onChange: (v: Channel[]) => void }) {
+  const { instagram, whatsapp } = useChannelAccounts();
+  const allowed = TRIGGER_EVENT_INFO[event].channels;
+  if (allowed.length < 2) {
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-zinc-500">
+        <ChannelGlyph channel={allowed[0]} className="size-3.5" /> Disponível só no {CHANNEL_INFO[allowed[0]].label}.
+      </p>
+    );
+  }
+  const connected: Record<Channel, boolean> = { instagram: instagram.length > 0, whatsapp: whatsapp.length > 0 };
+  return (
+    <Field label="Em quais canais?" hint="Com os dois marcados, a mesma automação responde no Instagram e no WhatsApp.">
+      <div className="flex flex-wrap gap-2">
+        {allowed.map((c) => {
+          const on = value.includes(c);
+          return (
+            <button
+              key={c}
+              type="button"
+              aria-pressed={on}
+              onClick={() => {
+                const next = on ? value.filter((x) => x !== c) : [...value, c];
+                if (next.length) onChange(next);
+              }}
+              className={cn(
+                "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium",
+                on ? "border-brand-500 bg-brand-50 text-brand-800" : "border-zinc-200 text-zinc-600 hover:border-zinc-300",
+              )}
+            >
+              <ChannelGlyph channel={c} className="size-4" />
+              {CHANNEL_INFO[c].label}
+              {!connected[c] && <span className="text-xs font-normal text-zinc-400">(não conectado)</span>}
+            </button>
+          );
+        })}
+      </div>
+    </Field>
+  );
+}
+
+function useApprovedTemplates() {
+  return useQuery({
+    queryKey: ["whatsapp-templates", "approved"],
+    queryFn: () => api.get<{ templates: WhatsAppTemplate[] }>("/whatsapp/templates?status=approved"),
+    staleTime: 60_000,
+  });
+}
+
+function WhatsAppTemplateEditor({ d, patch }: { d: NodeDataMap["whatsapp_template"]; patch: (p: Partial<NodeDataMap["whatsapp_template"]>) => void }) {
+  const { data, isLoading } = useApprovedTemplates();
+  const templates = data?.templates ?? [];
+  const selected = templates.find((t) => t.name === d.templateName && t.language === d.language);
+  const choose = (id: string) => {
+    const t = templates.find((x) => x.id === id);
+    if (!t) return patch({ templateName: "", bodyText: "", bodyParams: [], category: "", headerImageUrl: "" });
+    patch({
+      templateName: t.name,
+      language: t.language,
+      category: t.category,
+      bodyText: t.bodyText,
+      bodyParams: Array.from({ length: t.paramsCount }, (_, i) => d.bodyParams[i] ?? (i === 0 ? "{{primeiro_nome}}" : "")),
+      headerImageUrl: t.headerFormat === "IMAGE" ? d.headerImageUrl : "",
+    });
+  };
+  if (isLoading) return <p className="text-sm text-zinc-500">Carregando modelos…</p>;
+  return (
+    <div className="space-y-4">
+      {!templates.length ? (
+        <Callout tone="warning" title="Nenhum modelo aprovado">
+          Crie um modelo em{" "}
+          <Link to="/app/canais?canal=whatsapp" className="font-medium underline">
+            Canais → WhatsApp
+          </Link>{" "}
+          e aguarde a aprovação da Meta.
+        </Callout>
+      ) : (
+        <Field label="Modelo aprovado">
+          <Select value={selected?.id ?? ""} onChange={(e) => choose(e.target.value)}>
+            <option value="">Escolha um modelo…</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name} ({t.language}) · {t.category === "MARKETING" ? "Marketing" : t.category === "UTILITY" ? "Utilidade" : t.category}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
+      {d.templateName && !selected && templates.length > 0 && (
+        <Callout tone="error">O modelo “{d.templateName}” não está mais aprovado ou foi excluído. Escolha outro.</Callout>
+      )}
+      {d.bodyText && (
+        <div className="rounded-xl bg-emerald-50 p-3 text-sm whitespace-pre-wrap text-zinc-800">
+          {d.bodyText.replace(/\{\{(\d+)\}\}/g, (m, n) => d.bodyParams[Number(n) - 1] || m)}
+        </div>
+      )}
+      {d.bodyParams.map((p, i) => (
+        <Field key={i} label={`Valor de {{${i + 1}}}`} hint={i === 0 ? "Pode usar variáveis do contato, como {{primeiro_nome}}." : undefined}>
+          <Input value={p} maxLength={200} onChange={(e) => patch({ bodyParams: d.bodyParams.map((x, j) => (j === i ? e.target.value : x)) })} />
+        </Field>
+      ))}
+      {selected?.headerFormat === "IMAGE" && (
+        <Field label="Imagem do cabeçalho">
+          <ImageField value={d.headerImageUrl} onChange={(headerImageUrl) => patch({ headerImageUrl })} />
+        </Field>
+      )}
+      <p className="text-xs text-zinc-500">Modelos são cobrados pela Meta por mensagem entregue, direto na sua conta do WhatsApp Business.</p>
+    </div>
+  );
+}
+
+function WhatsAppHandoffEditor({ d, patch }: { d: NodeDataMap["whatsapp_handoff"]; patch: (p: Partial<NodeDataMap["whatsapp_handoff"]>) => void }) {
+  const { whatsapp } = useChannelAccounts();
+  return (
+    <div className="space-y-4">
+      {!whatsapp.length && (
+        <Callout tone="warning">
+          Conecte um número em{" "}
+          <Link to="/app/canais?canal=whatsapp" className="font-medium underline">
+            Canais → WhatsApp
+          </Link>{" "}
+          para o botão funcionar.
+        </Callout>
+      )}
+      {whatsapp.length > 1 && (
+        <Field label="Número do WhatsApp">
+          <Select value={d.accountId} onChange={(e) => patch({ accountId: e.target.value })}>
+            <option value="">Primeiro número conectado</option>
+            {whatsapp.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name ? `${a.name} · ${a.displayHandle}` : a.displayHandle}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
+      <Field label="Mensagem no Direct">
+        <MessageEditor value={d.text} onChange={(text) => patch({ text })} rows={3} />
+      </Field>
+      <Field label="Texto do botão" hint={`${d.buttonTitle.length}/${LIMITS.buttonTitleMaxLength}`}>
+        <Input value={d.buttonTitle} maxLength={LIMITS.buttonTitleMaxLength} onChange={(e) => patch({ buttonTitle: e.target.value })} />
+      </Field>
+      <Field
+        label="Mensagem já digitada no WhatsApp"
+        hint="O contato só precisa tocar em enviar. A conversa então começa no WhatsApp e as automações de lá respondem."
+      >
+        <Textarea rows={2} maxLength={500} value={d.prefill} onChange={(e) => patch({ prefill: e.target.value })} />
       </Field>
     </div>
   );
@@ -202,12 +378,14 @@ export function NodeEditor({
   onDelete,
   onDuplicate,
   issues,
+  channels,
 }: {
   node: FlowNode;
   onChange: (data: FlowNode["data"]) => void;
   onDelete: () => void;
   onDuplicate: () => void;
   issues: string[];
+  channels: Channel[];
 }) {
   const { data: fields } = useFields();
   const qc = useQueryClient();
@@ -247,9 +425,20 @@ export function NodeEditor({
                 const info = TRIGGER_EVENT_INFO[ev];
                 return (
                   <label key={ev} className={cn("flex cursor-pointer gap-3 rounded-lg border p-3", d.event === ev ? "border-brand-500 bg-brand-50/50" : "border-zinc-200", !info.available && "cursor-not-allowed opacity-60")}>
-                    <input type="radio" disabled={!info.available} checked={d.event === ev} onChange={() => patch({ event: ev })} className="mt-1 accent-brand-600" />
+                    <input
+                      type="radio"
+                      disabled={!info.available}
+                      checked={d.event === ev}
+                      onChange={() => patch({ event: ev, channels: info.channels.length > 1 ? d.channels : info.channels })}
+                      className="mt-1 accent-brand-600"
+                    />
                     <span>
-                      <span className="block text-sm font-medium">{info.label}</span>
+                      <span className="flex items-center gap-1.5 text-sm font-medium">
+                        {info.label}
+                        {info.channels.map((c) => (
+                          <ChannelGlyph key={c} channel={c} className="size-3.5 text-zinc-400" />
+                        ))}
+                      </span>
                       <span className="block text-xs text-zinc-500">{info.available ? info.description : info.unavailableReason}</span>
                     </span>
                   </label>
@@ -257,6 +446,7 @@ export function NodeEditor({
               })}
             </div>
           </Field>
+          <TriggerChannels event={d.event} value={d.channels ?? ["instagram"]} onChange={(channels) => patch({ channels })} />
           {d.event === "comment" && (
             <>
               <Field label="Publicações monitoradas" hint={d.mediaIds.length ? `${d.mediaIds.length} selecionada(s)` : "Nenhuma selecionada = todas as publicações e Reels."}>
@@ -378,7 +568,13 @@ export function NodeEditor({
         </>
       )}
 
-      {node.type === "delay" && <DelayEditor seconds={d.seconds} onChange={(seconds) => patch({ seconds })} />}
+      {node.type === "delay" && (
+        <DelayEditor seconds={d.seconds} onChange={(seconds) => patch({ seconds })} max={channels.includes("whatsapp") ? LIMITS.maxSequenceDelaySeconds : LIMITS.maxDelaySeconds} />
+      )}
+
+      {node.type === "whatsapp_template" && <WhatsAppTemplateEditor d={d} patch={patch} />}
+
+      {node.type === "whatsapp_handoff" && <WhatsAppHandoffEditor d={d} patch={patch} />}
 
       {(node.type === "add_tag" || node.type === "remove_tag") && (
         <Field label="Tag">

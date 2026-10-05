@@ -38,6 +38,16 @@ services:
         sync: false
       - key: META_WEBHOOK_VERIFY_TOKEN
         sync: false
+      - key: META_APP_ID # WhatsApp (cadastro incorporado)
+        sync: false
+      - key: META_APP_SECRET
+        sync: false
+      - key: WHATSAPP_CONFIG_ID
+        sync: false
+      - key: MP_ACCESS_TOKEN # Mercado Pago
+        sync: false
+      - key: MP_WEBHOOK_SECRET
+        sync: false
       - key: SUPPORT_EMAIL
         sync: false
       - key: ADMIN_EMAILS

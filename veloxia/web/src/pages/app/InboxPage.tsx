@@ -3,23 +3,27 @@ import { ArrowLeft, Bot, CircleAlert, Hand, Headphones, Info, MessagesSquare, Pl
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import { CONTACT_SOURCES, LIMITS } from "@veloxia/shared";
+import { CHANNEL_INFO, CONTACT_SOURCES, LIMITS, formatPhone, templateParamCount, type Channel } from "@veloxia/shared";
+import { ChannelGlyph } from "../../components/brand/Logo";
+import { useChannelAccounts } from "../../hooks/useChannels";
 import { OutboundContentView } from "../../components/automation/Bubbles";
 import { skipReasonLabel } from "../../components/automation/badges";
-import { Avatar, Badge, Button, ButtonLink, Callout, Drawer, EmptyState, Input, Skeleton, TagPill, Textarea } from "../../components/ui";
+import { Avatar, Badge, Button, ButtonLink, Callout, Drawer, EmptyState, Field, Input, Modal, Select, Skeleton, TagPill, Textarea } from "../../components/ui";
 import { api, errorMessage, qs } from "../../lib/api";
 import { cn } from "../../lib/cn";
 import { formatDate, formatDateTime, formatTime, relativeTime, shortStamp } from "../../lib/format";
-import type { ConversationRow, MessageRow, TagItem } from "../../lib/types";
+import type { ChannelAccount, ConversationRow, MessageRow, TagItem, WhatsAppTemplate } from "../../lib/types";
 import { useTags } from "./automations/flow/NodeEditor";
 
 type Filter = "all" | "unread" | "human" | "automation" | "closed";
 
 interface ConversationDetail {
-  conversation: { id: string; status: "open" | "closed"; mode: "automation" | "human"; humanSince: string | null; humanByName: string | null; unreadCount: number };
+  conversation: { id: string; channel: Channel; status: "open" | "closed"; mode: "automation" | "human"; humanSince: string | null; humanByName: string | null; unreadCount: number };
   contact: {
     id: string;
-    igsid: string;
+    channel: Channel;
+    externalId: string;
+    phone: string | null;
     username: string | null;
     name: string | null;
     profilePicUrl: string | null;
@@ -30,12 +34,15 @@ interface ConversationDetail {
     lastKeyword: string | null;
     tags: TagItem[];
   };
-  window: { open: boolean; humanAgent: boolean; canReply: boolean; closesAt: string | null };
-  account: { username: string; status: string } | null;
+  window: { open: boolean; humanAgent: boolean; canReply: boolean; templateRequired: boolean; closesAt: string | null };
+  account: ChannelAccount | null;
 }
 
 function ConversationList({ activeId }: { activeId?: string }) {
   const [filter, setFilter] = useState<Filter>("all");
+  const [channel, setChannel] = useState<Channel | "">("");
+  const { instagram, whatsapp } = useChannelAccounts();
+  const multiChannel = instagram.length > 0 && whatsapp.length > 0;
   const [q, setQ] = useState("");
   const [debounced, setDebounced] = useState("");
   useEffect(() => {
@@ -43,8 +50,9 @@ function ConversationList({ activeId }: { activeId?: string }) {
     return () => clearTimeout(t);
   }, [q]);
   const { data, isLoading } = useQuery({
-    queryKey: ["conversations", { filter, q: debounced }],
-    queryFn: () => api.get<{ conversations: ConversationRow[]; counts: { unread: number; human: number } }>(`/conversations${qs({ filter, q: debounced, pageSize: 60 })}`),
+    queryKey: ["conversations", { filter, q: debounced, channel }],
+    queryFn: () =>
+      api.get<{ conversations: ConversationRow[]; counts: { unread: number; human: number } }>(`/conversations${qs({ filter, q: debounced, channel, pageSize: 60 })}`),
     refetchInterval: 30_000,
   });
   const filters: { value: Filter; label: string; count?: number }[] = [
@@ -59,8 +67,25 @@ function ConversationList({ activeId }: { activeId?: string }) {
       <div className="space-y-3 border-b border-zinc-200 p-3">
         <div className="relative">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-zinc-400" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar nome, @ ou mensagem" className="pl-9" aria-label="Buscar conversas" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar nome, @, telefone ou mensagem" className="pl-9" aria-label="Buscar conversas" />
         </div>
+        {multiChannel && (
+          <div className="flex gap-1">
+            {(["", "instagram", "whatsapp"] as const).map((c) => (
+              <button
+                key={c || "all"}
+                onClick={() => setChannel(c)}
+                className={cn(
+                  "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium",
+                  channel === c ? "bg-brand-50 text-brand-800 ring-1 ring-brand-300" : "text-zinc-600 hover:bg-zinc-100",
+                )}
+              >
+                {c && <ChannelGlyph channel={c} className="size-3.5" />}
+                {c ? CHANNEL_INFO[c].label : "Todos os canais"}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="scrollbar-thin flex gap-1 overflow-x-auto">
           {filters.map((f) => (
             <button
@@ -82,7 +107,7 @@ function ConversationList({ activeId }: { activeId?: string }) {
             ))}
           </div>
         ) : !data?.conversations.length ? (
-          <EmptyState icon={<MessagesSquare className="size-6" />} title="Nenhuma conversa" description={filter === "all" && !debounced ? "As mensagens recebidas no Direct aparecem aqui." : "Nada encontrado com esse filtro."} />
+          <EmptyState icon={<MessagesSquare className="size-6" />} title="Nenhuma conversa" description={filter === "all" && !debounced ? "As mensagens recebidas no Instagram e no WhatsApp aparecem aqui." : "Nada encontrado com esse filtro."} />
         ) : (
           <ul>
             {data.conversations.map((c) => (
@@ -91,15 +116,28 @@ function ConversationList({ activeId }: { activeId?: string }) {
                   to={`/app/conversas/${c.id}`}
                   className={cn("flex gap-3 border-b border-zinc-100 px-3 py-3 transition-colors", activeId === c.id ? "bg-brand-50/70" : "hover:bg-zinc-50")}
                 >
-                  <Avatar src={c.contactPic} name={c.contactName ?? c.contactUsername} size={42} />
+                  <span className="relative h-fit shrink-0">
+                    <Avatar src={c.contactPic} name={c.contactName ?? c.contactUsername ?? c.contactPhone} size={42} />
+                    <span
+                      className={cn(
+                        "absolute -right-0.5 -bottom-0.5 flex size-[18px] items-center justify-center rounded-full text-white ring-2 ring-white",
+                        c.channel === "whatsapp" ? "bg-emerald-500" : "bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600",
+                      )}
+                      title={CHANNEL_INFO[c.channel].label}
+                    >
+                      <ChannelGlyph channel={c.channel} className="size-2.5" />
+                    </span>
+                  </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
                       <p className={cn("truncate text-sm", c.unreadCount ? "font-semibold text-zinc-900" : "font-medium text-zinc-800")}>
-                        {c.contactName ?? (c.contactUsername ? `@${c.contactUsername}` : "Contato")}
+                        {c.contactName ?? (c.contactUsername ? `@${c.contactUsername}` : c.contactPhone ? formatPhone(c.contactPhone) : "Contato")}
                       </p>
                       <span className="shrink-0 text-[11px] text-zinc-400">{shortStamp(c.lastMessageAt)}</span>
                     </div>
-                    {c.contactName && c.contactUsername && <p className="truncate text-xs text-zinc-400">@{c.contactUsername}</p>}
+                    {c.contactName && (c.contactUsername || c.contactPhone) && (
+                      <p className="truncate text-xs text-zinc-400">{c.contactUsername ? `@${c.contactUsername}` : formatPhone(c.contactPhone)}</p>
+                    )}
                     <p className={cn("truncate text-sm", c.unreadCount ? "text-zinc-800" : "text-zinc-500")}>
                       {c.lastMessageDirection === "outbound" && <span className="text-zinc-400">Você: </span>}
                       {c.lastMessagePreview}
@@ -135,7 +173,7 @@ function ConversationList({ activeId }: { activeId?: string }) {
 function sourceLabel(m: MessageRow): string {
   if (m.source === "automation") return m.automationName ? `Automação · ${m.automationName}` : "Automação";
   if (m.source === "agent") return m.sentByName ? `Você · ${m.sentByName}` : "Atendente";
-  if (m.source === "instagram_app") return "Enviada pelo app do Instagram";
+  if (m.source === "native_app") return "Enviada pelo app do canal";
   return "";
 }
 
@@ -204,6 +242,7 @@ function Thread({ id, onShowInfo }: { id: string; onShowInfo: () => void }) {
     getNextPageParam: (last) => (last.hasMore ? last.messages[0]?.createdAt : undefined),
   });
   const [text, setText] = useState("");
+  const [templateOpen, setTemplateOpen] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
   const all = useMemo(() => (messages.data?.pages ?? []).slice().reverse().flatMap((p) => p.messages), [messages.data]);
 
@@ -256,7 +295,8 @@ function Thread({ id, onShowInfo }: { id: string; onShowInfo: () => void }) {
 
   if (detail.isLoading) return <Skeleton className="m-4 h-96" />;
   if (detail.isError || !detail.data) return <EmptyState title="Conversa não encontrada" />;
-  const { conversation, contact, window: win } = detail.data;
+  const { conversation, contact, window: win, account } = detail.data;
+  const handle = contact.channel === "whatsapp" ? formatPhone(contact.phone ?? contact.externalId) : contact.username ? `@${contact.username}` : null;
   const human = conversation.mode === "human";
 
   const submit = (e: FormEvent) => {
@@ -273,9 +313,12 @@ function Thread({ id, onShowInfo }: { id: string; onShowInfo: () => void }) {
         </button>
         <Avatar src={contact.profilePicUrl} name={contact.name ?? contact.username} size={36} />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold">{contact.name ?? (contact.username ? `@${contact.username}` : "Contato")}</p>
+          <p className="flex items-center gap-1.5 truncate font-semibold">
+            <ChannelGlyph channel={contact.channel} className={cn("size-3.5 shrink-0", contact.channel === "whatsapp" ? "text-emerald-600" : "text-pink-600")} />
+            {contact.name ?? handle ?? "Contato"}
+          </p>
           <p className="truncate text-xs text-zinc-500">
-            {contact.username && `@${contact.username} · `}
+            {handle && contact.name && `${handle} · `}
             {human ? `Atendimento humano${conversation.humanByName ? ` (${conversation.humanByName})` : ""}` : "Automação ativa"}
           </p>
         </div>
@@ -335,6 +378,13 @@ function Thread({ id, onShowInfo }: { id: string; onShowInfo: () => void }) {
               Assumir conversa
             </Button>
           </div>
+        ) : !win.canReply && win.templateRequired ? (
+          <div className="flex flex-col items-start gap-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+            <span>Passaram 24h desde a última mensagem do cliente. No WhatsApp, agora só é possível enviar um modelo aprovado.</span>
+            <Button size="sm" onClick={() => setTemplateOpen(true)}>
+              Enviar modelo
+            </Button>
+          </div>
         ) : !win.canReply ? (
           <Callout tone="warning">
             A janela de 24h da Meta para responder este contato terminou. Você poderá responder quando ele enviar uma nova mensagem.
@@ -366,8 +416,102 @@ function Thread({ id, onShowInfo }: { id: string; onShowInfo: () => void }) {
             {win.humanAgent ? "Fora das 24h: envio com a etiqueta HUMAN_AGENT da Meta" : "Janela de resposta aberta"} até {formatDateTime(win.closesAt)}.
           </p>
         )}
+        {templateOpen && account && (
+          <SendTemplateModal
+            conversationId={id}
+            accountId={account.id}
+            onClose={() => setTemplateOpen(false)}
+            onSent={() => {
+              qc.invalidateQueries({ queryKey: ["messages", id] });
+              qc.invalidateQueries({ queryKey: ["conversations"] });
+            }}
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+function SendTemplateModal({ conversationId, accountId, onClose, onSent }: { conversationId: string; accountId: string; onClose: () => void; onSent: () => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["whatsapp-templates", "approved"],
+    queryFn: () => api.get<{ templates: WhatsAppTemplate[] }>("/whatsapp/templates?status=approved"),
+  });
+  const templates = (data?.templates ?? []).filter((t) => t.channelAccountId === accountId);
+  const [templateId, setTemplateId] = useState("");
+  const [params, setParams] = useState<string[]>([]);
+  const tpl = templates.find((t) => t.id === templateId);
+  const count = tpl ? templateParamCount(tpl.bodyText) : 0;
+  const send = useMutation({
+    mutationFn: () => api.post(`/conversations/${conversationId}/messages`, { template: { templateId, params: params.slice(0, count) } }),
+    onSuccess: () => {
+      toast.success("Modelo enviado");
+      onSent();
+      onClose();
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  return (
+    <Modal
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title="Enviar modelo do WhatsApp"
+      description="Cobrado pela Meta por mensagem entregue, direto na sua conta do WhatsApp Business."
+      footer={
+        <Button onClick={() => send.mutate()} loading={send.isPending} disabled={!tpl || params.slice(0, count).filter((p) => p.trim()).length < count}>
+          Enviar
+        </Button>
+      }
+    >
+      {isLoading ? (
+        <Skeleton className="h-24" />
+      ) : !templates.length ? (
+        <Callout tone="warning">
+          Nenhum modelo aprovado para este número. Crie um em{" "}
+          <Link to="/app/canais?canal=whatsapp" className="font-medium underline">
+            Canais → WhatsApp
+          </Link>
+          .
+        </Callout>
+      ) : (
+        <div className="space-y-4">
+          <Field label="Modelo">
+            <Select
+              value={templateId}
+              onChange={(e) => {
+                setTemplateId(e.target.value);
+                setParams([]);
+              }}
+            >
+              <option value="">Escolha…</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({t.language})
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {tpl && (
+            <div className="rounded-xl bg-emerald-50 p-3 text-sm whitespace-pre-wrap">
+              {tpl.bodyText.replace(/\{\{(\d+)\}\}/g, (m, n) => params[Number(n) - 1] || m)}
+            </div>
+          )}
+          {Array.from({ length: count }, (_, i) => (
+            <Field key={i} label={`Valor de {{${i + 1}}}`}>
+              <Input
+                value={params[i] ?? ""}
+                maxLength={500}
+                onChange={(e) => {
+                  const next = [...params];
+                  next[i] = e.target.value;
+                  setParams(next);
+                }}
+              />
+            </Field>
+          ))}
+        </div>
+      )}
+    </Modal>
   );
 }
 
@@ -393,7 +537,8 @@ function ContactPanel({ id }: { id: string }) {
       <div className="flex flex-col items-center text-center">
         <Avatar src={contact.profilePicUrl} name={contact.name ?? contact.username} size={64} />
         <p className="mt-2 font-semibold">{contact.name ?? "Sem nome"}</p>
-        {contact.username && (
+        {contact.channel === "whatsapp" && <p className="text-sm text-zinc-600">{formatPhone(contact.phone ?? contact.externalId)}</p>}
+        {contact.channel === "instagram" && contact.username && (
           <a href={`https://instagram.com/${contact.username}`} target="_blank" rel="noreferrer" className="text-sm text-brand-700 hover:underline">
             @{contact.username}
           </a>

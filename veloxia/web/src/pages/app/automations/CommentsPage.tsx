@@ -91,7 +91,7 @@ export default function CommentsPage() {
           </>
         }
       />
-      {account && !account.permissions.comments && (
+      {account && !account.permissions?.comments && (
         <Callout tone="warning" title="Permissão de comentários não concedida">
           Reconecte o Instagram e autorize “instagram_business_manage_comments” para usar este recurso.
         </Callout>
