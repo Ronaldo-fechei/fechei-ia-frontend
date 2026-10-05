@@ -5,12 +5,13 @@
 # - o site "dorme" após ~15 min sem acesso e leva ~1 min para acordar
 #   (webhooks atrasam e os blocos "Aguardar" ficam parados enquanto ele dorme);
 # - o banco de dados não é criado no Render: use um PostgreSQL grátis do Neon
-#   (neon.com) e cole a connection string em DATABASE_URL ao criar o Blueprint
+#   (neon.com, região AWS US East 2 — Ohio, a mesma do serviço) e cole a connection string em DATABASE_URL ao criar o Blueprint
 #   (desative "Connection pooling" no Neon — a fila usa LISTEN/NOTIFY).
 services:
   - type: web
     name: veloxia
     runtime: docker
+    region: ohio
     plan: free
     dockerContext: ./veloxia
     dockerfilePath: ./veloxia/Dockerfile

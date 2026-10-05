@@ -9,6 +9,7 @@ services:
   - type: web
     name: veloxia
     runtime: docker
+    region: ohio
     plan: starter
     dockerContext: ./veloxia
     dockerfilePath: ./veloxia/Dockerfile
@@ -67,6 +68,7 @@ services:
 databases:
   - name: veloxia-db
     databaseName: veloxia
+    region: ohio
     user: veloxia
     plan: basic-256mb
     postgresMajorVersion: "16"
