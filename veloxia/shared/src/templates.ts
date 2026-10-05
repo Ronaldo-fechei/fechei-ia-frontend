@@ -6,6 +6,7 @@
  * Referências a tags usam o prefixo "name:" (ex.: "name:Lead") e são
  * resolvidas pelo servidor para o ID real da tag ao usar o modelo.
  */
+import type { Channel } from "./channels";
 import { triggerDataSchema, type Flow, type FlowEdge, type FlowNode, type NodeDataMap, type NodeType, type TriggerEvent } from "./flow";
 
 export interface TemplateDefinition {
@@ -14,6 +15,8 @@ export interface TemplateDefinition {
   description: string;
   category: string;
   triggerEvent: TriggerEvent;
+  /** Canais usados pelo modelo (para destacar os que exigem WhatsApp conectado). */
+  channels: Channel[];
   /** Nome sugerido para a automação criada. */
   automationName: string;
   highlights: string[];
@@ -55,6 +58,7 @@ export const TEMPLATES: TemplateDefinition[] = [
     description: "Quando alguém pedir o link, responde na hora com um botão para o produto.",
     category: "Envio de link",
     triggerEvent: "dm",
+    channels: ["instagram"],
     automationName: "Link do produto",
     highlights: ["Palavras: LINK, QUERO, ONDE COMPRAR", "Mensagem + botão com link rastreado"],
     build: () => {
@@ -78,6 +82,7 @@ export const TEMPLATES: TemplateDefinition[] = [
     description: "Responde dúvidas comuns (entrega, prazo, pagamento) com caminhos diferentes por palavra-chave.",
     category: "FAQ",
     triggerEvent: "dm",
+    channels: ["instagram"],
     automationName: "Perguntas frequentes",
     highlights: ["Um caminho por assunto", "Entrega, pagamento e prazo"],
     build: () => {
@@ -105,6 +110,7 @@ export const TEMPLATES: TemplateDefinition[] = [
     description: "Apresenta um produto com imagem, descrição e botão de compra.",
     category: "Produto",
     triggerEvent: "dm",
+    channels: ["instagram"],
     automationName: "Apresentação do produto",
     highlights: ["Imagem do produto", "Espera de 3s para parecer natural", "Botão de compra"],
     build: () => {
@@ -125,6 +131,7 @@ export const TEMPLATES: TemplateDefinition[] = [
     description: "Envia um cupom e o link da promoção para quem pedir.",
     category: "Promoção",
     triggerEvent: "dm",
+    channels: ["instagram"],
     automationName: "Promoção da semana",
     highlights: ["Palavras: PROMO, CUPOM, DESCONTO", "Marca o contato com a tag Interessado"],
     build: () => {
@@ -144,6 +151,7 @@ export const TEMPLATES: TemplateDefinition[] = [
     description: "Pergunta se a pessoa quer o catálogo e salva o e-mail no contato.",
     category: "Captura de lead",
     triggerEvent: "dm",
+    channels: ["instagram"],
     automationName: "Catálogo por e-mail",
     highlights: ["Botões SIM / NÃO", "Salva o e-mail no campo do contato", "Tag Lead"],
     build: () => {
@@ -178,6 +186,7 @@ export const TEMPLATES: TemplateDefinition[] = [
     description: "Encaminha para um atendente humano quando a pessoa pede ajuda.",
     category: "Atendimento",
     triggerEvent: "dm",
+    channels: ["instagram"],
     automationName: "Falar com atendente",
     highlights: ["Pausa as automações do contato", "Notifica a equipe na Caixa de entrada"],
     build: () => {
@@ -195,6 +204,7 @@ export const TEMPLATES: TemplateDefinition[] = [
     description: '"Comente LINK para receber" — envia o link no Direct de quem comentar.',
     category: "Comentário → DM",
     triggerEvent: "comment",
+    channels: ["instagram"],
     automationName: "Comentou LINK, recebeu no Direct",
     highlights: ["Resposta privada oficial", "Resposta pública opcional no comentário", "Botão com link rastreado"],
     build: () => {
@@ -221,6 +231,7 @@ export const TEMPLATES: TemplateDefinition[] = [
     description: "Quando alguém responder ao seu Story, envia uma mensagem com link.",
     category: "Story → DM",
     triggerEvent: "story_reply",
+    channels: ["instagram"],
     automationName: "Resposta ao Story",
     highlights: ["Responde a qualquer resposta de Story", "Envia link rastreado", "Tag Interessado"],
     build: () => {
@@ -243,6 +254,7 @@ export const TEMPLATES: TemplateDefinition[] = [
     description: "Agradece automaticamente quem mencionar sua conta em um Story.",
     category: "Story → DM",
     triggerEvent: "story_mention",
+    channels: ["instagram"],
     automationName: "Obrigado pela menção",
     highlights: ["Gatilho de menção oficial", "Mensagem personalizada com o nome"],
     build: () => {
@@ -250,6 +262,89 @@ export const TEMPLATES: TemplateDefinition[] = [
       const t = b.node("trigger", "trigger", trigger("story_mention"));
       const m = b.node("thanks", "message", { text: "Muito obrigado pela menção, {{primeiro_nome|tudo bem}}! ❤️ Ficamos muito felizes." });
       b.link(t, m);
+      return b.flow();
+    },
+  },
+  {
+    id: "atendimento-instagram-whatsapp",
+    name: "Atendimento no Instagram e no WhatsApp",
+    description: "A mesma automação responde preço, entrega e atendente nos dois canais.",
+    category: "Instagram + WhatsApp",
+    triggerEvent: "dm",
+    channels: ["instagram", "whatsapp"],
+    automationName: "Atendimento Instagram + WhatsApp",
+    highlights: ["Uma automação para os dois canais", "Botões de resposta", "Encaminha para atendente"],
+    build: () => {
+      const b = new FlowBuilder();
+      const t = b.node("trigger", "trigger", trigger("dm", { channels: ["instagram", "whatsapp"] }), 1, 0);
+      const k = b.node("keywords", "keyword", { keywords: kw("oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "menu") }, 1, 1);
+      const menu = b.node(
+        "menu",
+        "buttons",
+        {
+          text: "Oi, {{primeiro_nome|tudo bem}}! 👋 Sou o assistente da {{conta|nossa loja}}. Como posso ajudar?",
+          buttons: [
+            { id: "preco", title: "Preços", kind: "reply" },
+            { id: "entrega", title: "Entrega", kind: "reply" },
+            { id: "atendente", title: "Falar com atendente", kind: "reply" },
+          ],
+        },
+        1,
+        2,
+      );
+      const preco = b.node("preco", "message", { text: "Nossos preços estão no catálogo atualizado: (cole aqui o link do seu catálogo)" }, 0, 3);
+      const entrega = b.node("entrega", "message", { text: "Entregamos para todo o Brasil 🚚 O prazo aparece no carrinho conforme o seu CEP." }, 1, 3);
+      const humano = b.node("humano", "handoff", { message: "Certo! Já chamei alguém da equipe para continuar por aqui. 🙋" }, 2, 3);
+      b.link(t, k).link(k, menu).link(menu, preco, "btn:preco").link(menu, entrega, "btn:entrega").link(menu, humano, "btn:atendente");
+      return b.flow();
+    },
+  },
+  {
+    id: "instagram-para-whatsapp",
+    name: "Instagram → WhatsApp",
+    description: "Quem pedir atendimento no Direct recebe um botão que abre a conversa no seu WhatsApp.",
+    category: "Instagram + WhatsApp",
+    triggerEvent: "dm",
+    channels: ["instagram"],
+    automationName: "Levar para o WhatsApp",
+    highlights: ["Botão que abre o seu WhatsApp", "Mensagem já digitada para o cliente", "Clique rastreado"],
+    build: () => {
+      const b = new FlowBuilder();
+      const t = b.node("trigger", "trigger", trigger("dm"));
+      const k = b.node("keywords", "keyword", { keywords: kw("whatsapp", "zap", "orçamento", "orcamento", "atendimento") });
+      const w = b.node("wa", "whatsapp_handoff", {
+        text: "Vamos continuar pelo WhatsApp? É só tocar no botão abaixo 👇",
+        buttonTitle: "Abrir WhatsApp",
+        prefill: "Olá! Vim pelo Instagram e quero um orçamento 👋",
+        accountId: "",
+      });
+      b.link(t, k).link(k, w);
+      return b.flow();
+    },
+  },
+  {
+    id: "sequencia-whatsapp",
+    name: "Sequência de acompanhamento (WhatsApp)",
+    description: "Responde na hora e, se a pessoa não comprar, retoma o contato no dia seguinte com um modelo aprovado.",
+    category: "Sequências",
+    triggerEvent: "dm",
+    channels: ["whatsapp"],
+    automationName: "Acompanhamento em 1 dia",
+    highlights: ["Resposta imediata", "Espera de 1 dia", "Modelo aprovado pela Meta para retomar a conversa"],
+    build: () => {
+      const b = new FlowBuilder();
+      const t = b.node("trigger", "trigger", trigger("dm", { channels: ["whatsapp"] }));
+      const k = b.node("keywords", "keyword", { keywords: kw("preço", "valor", "quanto custa") });
+      const m = b.node("resposta", "link", {
+        text: "Oi, {{primeiro_nome|tudo bem}}! 😊 Os valores estão aqui:",
+        buttonTitle: "Ver preços",
+        url: "",
+        track: true,
+      });
+      const tag = b.node("tag", "add_tag", { tagId: "name:Interessado" });
+      const d = b.node("espera", "delay", { seconds: 86400 });
+      const tpl = b.node("modelo", "whatsapp_template", { templateName: "", language: "pt_BR", bodyParams: [] });
+      b.link(t, k).link(k, m).link(m, tag).link(tag, d).link(d, tpl);
       return b.flow();
     },
   },

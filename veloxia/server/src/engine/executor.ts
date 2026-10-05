@@ -1,22 +1,22 @@
 /**
  * Execução de fluxos em produção: carrega a execução, monta o runtime com
- * banco de dados + canal do Instagram, roda o interpretador e persiste o
- * resultado (agendando esperas e novas tentativas na fila).
+ * banco de dados + adaptador do canal (Instagram, WhatsApp…), roda o
+ * interpretador e persiste o resultado (agendando esperas e novas tentativas).
  */
 import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
-import { getTriggerNode, parseFlow, renderVariables, type Flow } from "@veloxia/shared";
+import { formatPhone, getTriggerNode, parseFlow, phoneDigits, renderVariables, type Flow } from "@veloxia/shared";
 import { env } from "../config/env";
 import { db } from "../db/client";
 import {
   automationExecutions,
   automations,
+  channelAccounts,
   commentEvents,
   contactTags,
   contacts,
   conversations,
   customFields,
   customFieldValues,
-  instagramAccounts,
   links,
   messages,
   tags,
@@ -24,9 +24,9 @@ import {
 } from "../db/schema";
 import { hmac, shortCode } from "../lib/crypto";
 import { logger } from "../lib/logger";
-import { GraphApiError } from "../integrations/instagram/client";
-import { InstagramChannel, toChannelError } from "../integrations/instagram/adapter";
-import { clientFor, handleAccountGraphError } from "../modules/instagram/service";
+import { getDriver } from "../channels/registry";
+import { handleAccountError } from "../channels/accounts";
+import type { ChannelAccount } from "../channels/types";
 import { incrementUsage, USAGE_METRICS } from "../modules/billing/limits";
 import { track, workspaceTimezone } from "../services/analytics";
 import { publishEvent } from "../services/events";
@@ -37,7 +37,7 @@ import { ChannelError, contentPreview, type ChannelAdapter, type OutboundContent
 import { runFlow, type EngineRuntime, type ExecState, type ResumeInput, type RunResult, type RuntimeContact } from "./runner";
 
 type Execution = typeof automationExecutions.$inferSelect;
-type Account = typeof instagramAccounts.$inferSelect;
+type Account = ChannelAccount;
 
 export interface RunExecutionPayload {
   executionId: string;
@@ -88,9 +88,10 @@ async function loadContactRuntime(contactId: string, workspaceId: string): Promi
     contact,
     rt: {
       id: contact.id,
-      externalId: contact.igsid,
+      externalId: contact.externalId,
       name: contact.name,
       username: contact.username,
+      phone: contact.phone,
       isFollower: contact.isFollower,
       lastInboundAt: contact.lastInboundAt,
       tagIds: new Set(tagRows.map((t) => t.tagId)),
@@ -103,19 +104,21 @@ class DbRuntime implements EngineRuntime {
   executionId: string;
   automationId: string | null;
   timezone: string;
-  accountUsername: string | null;
+  channel: Account["channel"];
+  accountDisplay: string | null;
 
   constructor(
     private readonly execution: Execution,
     private readonly account: Account,
     public contact: RuntimeContact,
-    private readonly channel: ChannelAdapter,
+    private readonly adapter: ChannelAdapter,
     timezone: string,
   ) {
     this.executionId = execution.id;
     this.automationId = execution.automationId;
     this.timezone = timezone;
-    this.accountUsername = account.username;
+    this.channel = account.channel;
+    this.accountDisplay = account.channel === "whatsapp" ? account.name || formatPhone(account.handle) : `@${account.handle}`;
   }
 
   now(): Date {
@@ -130,10 +133,10 @@ class DbRuntime implements EngineRuntime {
         workspaceId: ex.workspaceId,
         conversationId: ex.conversationId!,
         contactId: this.contact.id,
-        instagramAccountId: this.account.id,
+        channelAccountId: this.account.id,
         direction: "outbound",
         source: "automation",
-        type: content.kind === "buttons" ? "template" : content.kind,
+        type: content.kind === "buttons" ? "buttons" : content.kind,
         text: contentPreview(content),
         payload: { content, nodeId: opts.nodeId, ...(opts.commentId ? { privateReplyTo: opts.commentId } : {}) },
         status: "sending",
@@ -142,17 +145,17 @@ class DbRuntime implements EngineRuntime {
       .returning({ id: messages.id });
 
     try {
-      const outcome = await this.channel.send({ contactExternalId: this.contact.externalId, commentId: opts.commentId }, content);
+      const outcome = await this.adapter.send({ contactExternalId: this.contact.externalId, commentId: opts.commentId }, content);
       if (outcome.externalMessageId) {
         // Se o eco do webhook chegou antes, remove a cópia e mantém o registro da automação.
         await db
           .delete(messages)
           .where(
             and(
-              eq(messages.instagramAccountId, this.account.id),
+              eq(messages.channelAccountId, this.account.id),
               eq(messages.externalId, outcome.externalMessageId),
               ne(messages.id, row.id),
-              eq(messages.source, "instagram_app"),
+              eq(messages.source, "native_app"),
             ),
           );
       }
@@ -165,6 +168,7 @@ class DbRuntime implements EngineRuntime {
       await db.update(contacts).set({ lastInteractionAt: sentAt, updatedAt: sentAt }).where(eq(contacts.id, this.contact.id));
       await incrementUsage(ex.workspaceId, USAGE_METRICS.messages);
       await track(ex.workspaceId, "messages_out_auto", { automationId: ex.automationId });
+      await track(ex.workspaceId, `messages_out_auto_${this.account.channel}`);
 
       if (opts.commentId) {
         await db.update(commentEvents).set({ privateReplyStatus: "sent", privateReplyAt: sentAt }).where(eq(commentEvents.commentId, opts.commentId));
@@ -174,7 +178,7 @@ class DbRuntime implements EngineRuntime {
       await publishEvent({ workspaceId: ex.workspaceId, type: "message.created", ids: { conversationId: ex.conversationId! } });
       return { ...outcome, messageId: row.id };
     } catch (err) {
-      const channelErr = toChannelError(err);
+      const channelErr = getDriver(this.account.channel).toChannelError(err);
       await db
         .update(messages)
         .set({ status: "failed", errorCode: channelErr.code, errorMessage: channelErr.userMessage })
@@ -182,7 +186,7 @@ class DbRuntime implements EngineRuntime {
       if (opts.commentId && !channelErr.retryable) {
         await db.update(commentEvents).set({ privateReplyStatus: "failed" }).where(eq(commentEvents.commentId, opts.commentId));
       }
-      if (channelErr.cause instanceof GraphApiError) await handleAccountGraphError(this.account, channelErr.cause);
+      await handleAccountError(this.account, channelErr);
       await publishEvent({ workspaceId: ex.workspaceId, type: "message.updated", ids: { conversationId: ex.conversationId! } });
       throw channelErr;
     }
@@ -194,10 +198,10 @@ class DbRuntime implements EngineRuntime {
     const [clash] = await db
       .select({ id: contacts.id })
       .from(contacts)
-      .where(and(eq(contacts.instagramAccountId, this.account.id), eq(contacts.igsid, recipientId)))
+      .where(and(eq(contacts.channelAccountId, this.account.id), eq(contacts.externalId, recipientId)))
       .limit(1);
     if (clash) return;
-    await db.update(contacts).set({ igsid: recipientId, updatedAt: new Date() }).where(eq(contacts.id, this.contact.id));
+    await db.update(contacts).set({ externalId: recipientId, updatedAt: new Date() }).where(eq(contacts.id, this.contact.id));
     this.contact.externalId = recipientId;
   }
 
@@ -256,7 +260,7 @@ class DbRuntime implements EngineRuntime {
       workspaceId: ex.workspaceId,
       type: "handoff_requested",
       severity: "info",
-      title: `${this.contact.username ? "@" + this.contact.username : "Um contato"} pediu atendimento humano`,
+      title: `${this.contact.username ? "@" + this.contact.username : this.contact.name || (this.contact.phone ? formatPhone(this.contact.phone) : "Um contato")} pediu atendimento humano`,
       body: `Encaminhado pela automação "${ex.automationName}". As automações estão pausadas para este contato.`,
       linkUrl: `/app/conversas/${ex.conversationId}`,
     });
@@ -267,6 +271,25 @@ class DbRuntime implements EngineRuntime {
     if (!track || !this.execution.automationId || !/^https?:\/\//i.test(url)) return url;
     const code = await ensureTrackedLink(this.execution.workspaceId, this.execution.automationId, nodeId, buttonId, url);
     return trackedLinkUrl(code, this.executionId);
+  }
+
+  async whatsappLink(accountId: string, prefill: string): Promise<string | null> {
+    const [wa] = await db
+      .select({ handle: channelAccounts.handle })
+      .from(channelAccounts)
+      .where(
+        and(
+          eq(channelAccounts.workspaceId, this.execution.workspaceId),
+          eq(channelAccounts.channel, "whatsapp"),
+          isNull(channelAccounts.disconnectedAt),
+          accountId ? eq(channelAccounts.id, accountId) : undefined,
+        ),
+      )
+      .orderBy(channelAccounts.connectedAt)
+      .limit(1);
+    if (!wa) return null;
+    const text = prefill.trim() ? `?text=${encodeURIComponent(prefill.trim())}` : "";
+    return `https://wa.me/${phoneDigits(wa.handle)}${text}`;
   }
 
   async checkpoint(state: ExecState): Promise<void> {
@@ -324,11 +347,11 @@ export async function runExecutionJob(payload: RunExecutionPayload): Promise<voi
     }
     if (resume.kind === "input" && (ex.status !== "waiting" || ex.waitType !== "input")) return finish(ex.id, {});
 
-    const [account] = ex.instagramAccountId
-      ? await db.select().from(instagramAccounts).where(eq(instagramAccounts.id, ex.instagramAccountId)).limit(1)
+    const [account] = ex.channelAccountId
+      ? await db.select().from(channelAccounts).where(eq(channelAccounts.id, ex.channelAccountId)).limit(1)
       : [];
     if (!account || account.disconnectedAt || account.status !== "connected") {
-      return failExecution(ex, "account_disconnected", "A conta do Instagram está desconectada ou com token expirado.");
+      return failExecution(ex, "account_disconnected", "A conta do canal está desconectada ou com a autorização expirada.");
     }
 
     const [automation] = ex.automationId ? await db.select().from(automations).where(eq(automations.id, ex.automationId)).limit(1) : [];
@@ -342,12 +365,12 @@ export async function runExecutionJob(payload: RunExecutionPayload): Promise<voi
     }
 
     const flow: Flow = parseFlow(ex.flowSnapshot ?? automation.flow);
-    const client = clientFor(account);
-    const channel = new InstagramChannel(client);
+    const driver = getDriver(account.channel);
+    const channel = driver.adapter(account);
     let { contact, rt: contactRt } = await loadContactRuntime(ex.contactId!, ex.workspaceId);
 
     // Primeiro envio: busca o perfil para personalizar {{nome}} (melhor esforço).
-    if (!contact.profileFetchedAt && (ex.context as ExecutionContext).origin !== "comment") {
+    if (driver.fetchProfile && !contact.profileFetchedAt && (ex.context as ExecutionContext).origin !== "comment") {
       await fetchContactProfile(contact.id).catch(() => undefined);
       ({ contact, rt: contactRt } = await loadContactRuntime(ex.contactId!, ex.workspaceId));
     }
@@ -382,7 +405,7 @@ async function maybePublicReply(ex: Execution, flow: Flow, result: RunResult, ch
     await db.update(commentEvents).set({ publicReplyStatus: "sent", publicReplyId: reply.id }).where(eq(commentEvents.commentId, ctx.commentId));
     result.state.steps.push({ nodeId: trigger.id, type: "trigger", at: new Date().toISOString(), status: "ok", detail: "Resposta pública publicada no comentário" });
   } catch (err) {
-    const e = err instanceof ChannelError ? err : toChannelError(err);
+    const e = err instanceof ChannelError ? err : getDriver(channel.channel).toChannelError(err);
     await db.update(commentEvents).set({ publicReplyStatus: "failed" }).where(eq(commentEvents.commentId, ctx.commentId));
     result.state.steps.push({ nodeId: trigger.id, type: "trigger", at: new Date().toISOString(), status: "error", detail: `Resposta pública: ${e.userMessage}` });
   }
@@ -417,7 +440,8 @@ async function persistResult(ex: Execution, result: RunResult): Promise<void> {
 async function failExecution(ex: Execution, code: string, message: string, extra: Partial<typeof automationExecutions.$inferInsert> = {}): Promise<void> {
   await finish(ex.id, { ...extra, status: "failed", errorCode: code, errorMessage: message, waitType: null, finishedAt: new Date() });
   await track(ex.workspaceId, "executions_failed", { automationId: ex.automationId });
-  // Conteúdo recusado pelo Instagram (link, imagem ou botão inválido): a automação para até ser corrigida.
+  // Conteúdo recusado pelo canal (link, imagem, botão ou modelo inválido) ou configuração ausente:
+  // a automação para até ser corrigida.
   if (code.startsWith("invalid") && ex.automationId) {
     const [paused] = await db
       .update(automations)
@@ -456,35 +480,31 @@ async function failExecution(ex: Execution, code: string, message: string, extra
 
 export async function fetchContactProfile(contactId: string): Promise<void> {
   const [row] = await db
-    .select({ contact: contacts, account: instagramAccounts })
+    .select({ contact: contacts, account: channelAccounts })
     .from(contacts)
-    .innerJoin(instagramAccounts, eq(instagramAccounts.id, contacts.instagramAccountId))
+    .innerJoin(channelAccounts, eq(channelAccounts.id, contacts.channelAccountId))
     .where(eq(contacts.id, contactId))
     .limit(1);
   if (!row || row.account.disconnectedAt || !row.account.accessTokenEnc) return;
+  const driver = getDriver(row.account.channel);
+  if (!driver.fetchProfile) return;
   try {
-    const profile = await clientFor(row.account).getUserProfile(row.contact.igsid);
+    const profile = await driver.fetchProfile(row.account, row.contact);
     await db
       .update(contacts)
-      .set({
-        name: profile.name ?? row.contact.name,
-        username: profile.username ?? row.contact.username,
-        profilePicUrl: profile.profile_pic ?? row.contact.profilePicUrl,
-        followerCount: profile.follower_count ?? row.contact.followerCount,
-        isFollower: profile.is_user_follow_business ?? row.contact.isFollower,
-        isFollowedByBusiness: profile.is_business_follow_user ?? row.contact.isFollowedByBusiness,
-        profileFetchedAt: new Date(),
-        updatedAt: new Date(),
-      })
+      .set({ ...profile, profileFetchedAt: new Date(), updatedAt: new Date() })
       .where(eq(contacts.id, contactId));
     await publishEvent({ workspaceId: row.contact.workspaceId, type: "contact.updated", ids: { contactId } });
   } catch (err) {
-    if (err instanceof GraphApiError) {
-      await handleAccountGraphError(row.account, err);
-      if (err.retryable) throw err;
+    const channelErr = driver.toChannelError(err);
+    // Erros que não vieram do provedor recebem o código genérico "unknown".
+    const fromProvider = channelErr.code !== "unknown";
+    if (fromProvider) {
+      await handleAccountError(row.account, channelErr);
+      if (channelErr.retryable) throw err;
       // Perfil indisponível (ex.: usuário sem consentimento): não insiste.
       await db.update(contacts).set({ profileFetchedAt: new Date() }).where(eq(contacts.id, contactId));
-      logger.info({ contactId, kind: err.kind }, "perfil do contato indisponível");
+      logger.info({ contactId, kind: channelErr.kind }, "perfil do contato indisponível");
       return;
     }
     await recordSystemError("contact.fetch_profile", err, { workspaceId: row.contact.workspaceId });

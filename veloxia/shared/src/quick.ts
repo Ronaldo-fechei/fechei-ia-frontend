@@ -4,6 +4,7 @@
  * de montar o fluxo mais comum (palavra-chave → [espera] → [imagem] → resposta).
  */
 import { z } from "zod";
+import { CHANNELS } from "./channels";
 import { keywordRuleSchema, LIMITS, triggerDataSchema, type Flow, type FlowEdge, type FlowNode } from "./flow";
 
 export const QUICK_TRIGGER_EVENTS = ["dm", "comment", "story_reply", "story_mention"] as const;
@@ -12,6 +13,8 @@ export const quickAutomationSchema = z
   .object({
     name: z.string().trim().min(1, "Dê um nome para a automação").max(80),
     triggerEvent: z.enum(QUICK_TRIGGER_EVENTS).default("dm"),
+    /** Canais (Mensagem direta pode responder no Instagram e no WhatsApp ao mesmo tempo). */
+    channels: z.array(z.enum(CHANNELS)).min(1, "Escolha pelo menos um canal").default(["instagram"]),
     keywords: z.array(keywordRuleSchema).max(LIMITS.maxKeywordsPerNode).default([]),
     message: z.string().trim().min(1, "Escreva a resposta").max(LIMITS.textMaxLength, `Máximo de ${LIMITS.textMaxLength} caracteres`),
     linkUrl: z.string().trim().optional().default(""),
@@ -28,6 +31,8 @@ export const quickAutomationSchema = z
       ctx.addIssue({ code: "custom", path: ["keywords"], message: "Adicione pelo menos uma palavra-chave" });
     if (value.linkUrl && !isUrl(value.linkUrl)) ctx.addIssue({ code: "custom", path: ["linkUrl"], message: "URL inválida" });
     if (value.imageUrl && !isUrl(value.imageUrl)) ctx.addIssue({ code: "custom", path: ["imageUrl"], message: "URL de imagem inválida" });
+    if (value.triggerEvent !== "dm" && value.channels.some((c) => c !== "instagram"))
+      ctx.addIssue({ code: "custom", path: ["channels"], message: "Comentários e Stories existem só no Instagram." });
     if (value.triggerEvent === "comment" && value.imageUrl)
       ctx.addIssue({
         code: "custom",
@@ -57,6 +62,7 @@ export function quickToFlow(input: QuickAutomation): Flow {
     type: "trigger",
     data: triggerDataSchema.parse({
       event: input.triggerEvent,
+      channels: input.triggerEvent === "dm" ? input.channels : ["instagram"],
       mediaIds: input.mediaIds,
       publicReplyEnabled: input.publicReplyEnabled,
       publicReplies: input.publicReplies,

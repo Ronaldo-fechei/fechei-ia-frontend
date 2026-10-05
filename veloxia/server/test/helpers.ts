@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
 import { buildApp } from "../src/app";
 import { db } from "../src/db/client";
-import { instagramAccounts, users, workspaceMembers } from "../src/db/schema";
+import { channelAccounts, users, workspaceMembers } from "../src/db/schema";
 import { encrypt } from "../src/lib/crypto";
 import { setHttpFetch } from "../src/integrations/http";
 import { jobHandlers } from "../src/queue/handlers";
@@ -60,20 +60,42 @@ export async function api(session: Session | null, method: Method, url: string, 
   return res as any;
 }
 
-export async function connectTestAccount(workspaceId: string, overrides: Partial<typeof instagramAccounts.$inferInsert> = {}) {
+export async function connectTestAccount(workspaceId: string, overrides: Partial<typeof channelAccounts.$inferInsert> = {}) {
   const [account] = await db
-    .insert(instagramAccounts)
+    .insert(channelAccounts)
     .values({
       workspaceId,
-      igUserId: overrides.igUserId ?? "17841400000000001",
-      igScopedId: "9000000000000001",
-      username: "minhaloja",
+      channel: "instagram",
+      externalId: overrides.externalId ?? "17841400000000001",
+      scopedId: "9000000000000001",
+      handle: "minhaloja",
       name: "Minha Loja",
       accountType: "BUSINESS",
       accessTokenEnc: encrypt("IGAA-test-token"),
       tokenExpiresAt: new Date(Date.now() + 50 * 86400_000),
       tokenRefreshedAt: new Date(),
       scopes: ["instagram_business_basic", "instagram_business_manage_messages", "instagram_business_manage_comments"],
+      status: "connected",
+      webhookSubscribedAt: new Date(),
+      ...overrides,
+    })
+    .returning();
+  return account;
+}
+
+/** Número do WhatsApp conectado para testes (Cloud API). */
+export async function connectTestWhatsApp(workspaceId: string, overrides: Partial<typeof channelAccounts.$inferInsert> = {}) {
+  const [account] = await db
+    .insert(channelAccounts)
+    .values({
+      workspaceId,
+      channel: "whatsapp",
+      externalId: overrides.externalId ?? "106540352242922",
+      handle: "5511999990000",
+      name: "Minha Loja",
+      metadata: { wabaId: "102290129340398", displayPhoneNumber: "+55 11 99999-0000" },
+      accessTokenEnc: encrypt("EAAG-wa-test-token"),
+      scopes: ["whatsapp_business_messaging", "whatsapp_business_management"],
       status: "connected",
       webhookSubscribedAt: new Date(),
       ...overrides,
@@ -114,6 +136,19 @@ export function mockGraph(responder?: (call: GraphCall) => { status?: number; bo
       return Response.json({ ...(body?.recipient?.id ? { recipient_id: body.recipient.id } : {}), message_id: `mid.out.${counter}` });
     }
     if (url.pathname.match(/\/replies$/)) return Response.json({ id: `reply-${++counter}` });
+    // WhatsApp Cloud API
+    if (url.pathname.match(/\/\d+\/messages$/) && body?.messaging_product === "whatsapp") {
+      if (body.status === "read") return Response.json({ success: true });
+      counter++;
+      return Response.json({ messaging_product: "whatsapp", contacts: [{ input: body.to, wa_id: body.to }], messages: [{ id: `wamid.out.${counter}` }] });
+    }
+    if (url.pathname.endsWith("/oauth/access_token") && url.hostname.includes("facebook")) return Response.json({ access_token: "EAAG-new-business-token" });
+    if (url.pathname.match(/\/\d+\/register$/)) return Response.json({ success: true });
+    if (url.pathname.endsWith("/message_templates") && (init?.method ?? "GET") === "GET") return Response.json({ data: [] });
+    if (url.pathname.endsWith("/message_templates") && init?.method === "POST") return Response.json({ id: `tpl-${++counter}`, status: "PENDING", category: body?.category });
+    if (url.searchParams.get("fields")?.includes("display_phone_number")) {
+      return Response.json({ id: url.pathname.split("/").pop(), display_phone_number: "+55 11 98888-0000", verified_name: "Loja Nova", quality_rating: "GREEN", messaging_limit_tier: "TIER_250" });
+    }
     if (url.pathname.endsWith("/subscribed_apps")) return Response.json({ success: true });
     if (url.searchParams.get("fields")?.includes("is_user_follow_business")) {
       return Response.json({ name: "Ana Cliente", username: "ana.cliente", profile_pic: "https://cdn.test/ana.jpg", is_user_follow_business: true, is_business_follow_user: false });
@@ -123,6 +158,7 @@ export function mockGraph(responder?: (call: GraphCall) => { status?: number; bo
   return {
     calls,
     sends: () => calls.filter((c) => c.url.pathname.endsWith("/me/messages")),
+    waSends: () => calls.filter((c) => c.url.pathname.match(/\/\d+\/messages$/) && c.body?.messaging_product === "whatsapp" && !c.body?.status),
     restore: () => setHttpFetch(null),
   };
 }
@@ -162,4 +198,61 @@ export async function drain(): Promise<number> {
 /** Antecipa jobs agendados (ex.: blocos "Aguardar") para rodarem agora. */
 export async function fastForwardJobs(): Promise<void> {
   await db.execute(sql`update jobs set run_at = now() where status = 'pending'`);
+}
+
+/** Webhook do WhatsApp assinado com a chave do app da Meta. */
+export async function postWhatsAppWebhook(payload: unknown, opts: { signature?: string } = {}) {
+  const a = await getApp();
+  const body = JSON.stringify(payload);
+  return a.inject({
+    method: "POST",
+    url: "/api/webhooks/whatsapp",
+    headers: { "content-type": "application/json", "x-hub-signature-256": opts.signature ?? signWebhook(body, "test-meta-secret") },
+    payload: body,
+  });
+}
+
+/** Mensagem recebida no WhatsApp (formato do webhook da Cloud API). */
+export function waPayload(phoneNumberId: string, from: string, message: Record<string, unknown>, opts: { name?: string; wabaId?: string } = {}) {
+  return {
+    object: "whatsapp_business_account",
+    entry: [
+      {
+        id: opts.wabaId ?? "102290129340398",
+        changes: [
+          {
+            field: "messages",
+            value: {
+              messaging_product: "whatsapp",
+              metadata: { display_phone_number: "5511999990000", phone_number_id: phoneNumberId },
+              contacts: [{ wa_id: from, profile: { name: opts.name ?? "Bruno Cliente" } }],
+              messages: [{ from, id: `wamid.in.${Math.random().toString(36).slice(2)}`, timestamp: String(Math.floor(Date.now() / 1000)), ...message }],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/** Status de entrega do WhatsApp (com o objeto de cobrança da Meta). */
+export function waStatusPayload(phoneNumberId: string, messageId: string, status: string, pricing?: Record<string, unknown>, errors?: unknown[]) {
+  return {
+    object: "whatsapp_business_account",
+    entry: [
+      {
+        id: "102290129340398",
+        changes: [
+          {
+            field: "messages",
+            value: {
+              messaging_product: "whatsapp",
+              metadata: { display_phone_number: "5511999990000", phone_number_id: phoneNumberId },
+              statuses: [{ id: messageId, status, timestamp: String(Math.floor(Date.now() / 1000)), recipient_id: "5511988887777", ...(pricing ? { pricing } : {}), ...(errors ? { errors } : {}) }],
+            },
+          },
+        ],
+      },
+    ],
+  };
 }

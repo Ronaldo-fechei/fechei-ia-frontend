@@ -17,8 +17,10 @@ export type JobType =
   | "webhook.process"
   | "execution.run"
   | "contact.fetch_profile"
-  | "instagram.subscribe_webhooks"
-  | "instagram.refresh_token"
+  | "channel.subscribe_webhooks"
+  | "channel.refresh_token"
+  | "whatsapp.sync_templates"
+  | "billing.promo_end"
   | "maintenance.tick";
 
 export type Job = typeof jobs.$inferSelect;

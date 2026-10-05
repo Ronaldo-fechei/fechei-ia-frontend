@@ -3,7 +3,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { db } from "../../db/client";
-import { instagramAccounts, jobs, plans, subscriptions, systemErrors, users, webhookEvents, workspaces } from "../../db/schema";
+import { channelAccounts, jobs, plans, subscriptions, systemErrors, users, webhookEvents, workspaces } from "../../db/schema";
 import { badRequest, notFound } from "../../lib/errors";
 import { parse, uuidParam } from "../../lib/validation";
 import { requireAdmin } from "../../plugins/auth";
@@ -17,7 +17,8 @@ export async function adminRoutes(app: FastifyInstance) {
     return {
       users: await count(sql`select count(*)::int as n from users`),
       workspaces: await count(sql`select count(*)::int as n from workspaces`),
-      instagramAccounts: await count(sql`select count(*)::int as n from instagram_accounts where disconnected_at is null`),
+      instagramAccounts: await count(sql`select count(*)::int as n from channel_accounts where channel = 'instagram' and disconnected_at is null`),
+      whatsappAccounts: await count(sql`select count(*)::int as n from channel_accounts where channel = 'whatsapp' and disconnected_at is null`),
       jobs: (await db.execute(sql`select status, count(*)::int as n from jobs group by status`)).rows,
       webhooks24h: (await db.execute(sql`select status, count(*)::int as n from webhook_events where received_at > now() - interval '24 hours' group by status`)).rows,
       errors24h: await count(sql`select count(*)::int as n from system_errors where created_at > now() - interval '24 hours'`),
@@ -111,21 +112,23 @@ export async function adminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get("/admin/instagram-accounts", async (req) => {
+  app.get("/admin/channel-accounts", async (req) => {
     requireAdmin(req);
     const rows = await db
       .select({
-        id: instagramAccounts.id,
-        username: instagramAccounts.username,
-        status: instagramAccounts.status,
-        webhookError: instagramAccounts.webhookError,
-        lastError: instagramAccounts.lastError,
-        lastWebhookAt: instagramAccounts.lastWebhookAt,
-        tokenExpiresAt: instagramAccounts.tokenExpiresAt,
-        workspaceId: instagramAccounts.workspaceId,
+        id: channelAccounts.id,
+        channel: channelAccounts.channel,
+        handle: channelAccounts.handle,
+        status: channelAccounts.status,
+        webhookError: channelAccounts.webhookError,
+        lastError: channelAccounts.lastError,
+        lastWebhookAt: channelAccounts.lastWebhookAt,
+        tokenExpiresAt: channelAccounts.tokenExpiresAt,
+        workspaceId: channelAccounts.workspaceId,
+        disconnectedAt: channelAccounts.disconnectedAt,
       })
-      .from(instagramAccounts)
-      .orderBy(desc(instagramAccounts.updatedAt))
+      .from(channelAccounts)
+      .orderBy(desc(channelAccounts.updatedAt))
       .limit(500);
     return { accounts: rows };
   });

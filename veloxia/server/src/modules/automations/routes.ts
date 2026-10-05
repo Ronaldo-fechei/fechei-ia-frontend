@@ -2,6 +2,9 @@ import { and, desc, eq, gte, ilike, inArray, isNull, or, sql, type SQL } from "d
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
+  CHANNELS,
+  formatPhone,
+  type Channel,
   AUTOMATION_STATUSES,
   keywordKey,
   MATCH_TYPES,
@@ -17,7 +20,7 @@ import {
   automationTriggers,
   commentEvents,
   contacts,
-  instagramAccounts,
+  channelAccounts,
   links,
   messages,
   tags,
@@ -51,7 +54,7 @@ const createSchema = z.object({
   faqQuestion: z.string().max(300).optional(),
   priority: z.number().int().min(-100).max(100).optional(),
   cooldownSeconds: z.number().int().min(0).max(30 * 86400).optional(),
-  instagramAccountId: z.string().uuid().nullable().optional(),
+  channelAccountId: z.string().uuid().nullable().optional(),
   publish: z.boolean().optional(),
 });
 
@@ -63,6 +66,7 @@ const updateSchema = createSchema
 const simulateSchema = z.object({
   message: z.string().max(1000).default(""),
   event: z.enum(["dm", "comment", "story_reply", "story_mention"]).default("dm"),
+  channel: z.enum(CHANNELS).default("instagram"),
   useDraft: z.boolean().default(true),
   contact: z
     .object({
@@ -90,13 +94,17 @@ async function tagNameMap(workspaceId: string) {
   return new Map(rows.map((t) => [t.id, t.name]));
 }
 
-async function primaryUsername(workspaceId: string): Promise<string | null> {
-  const [acc] = await db
-    .select({ username: instagramAccounts.username })
-    .from(instagramAccounts)
-    .where(and(eq(instagramAccounts.workspaceId, workspaceId), isNull(instagramAccounts.disconnectedAt)))
-    .limit(1);
-  return acc?.username ?? null;
+/** Conta usada em {{conta}} no simulador e número do WhatsApp para o bloco "Levar para o WhatsApp". */
+async function simulationAccounts(workspaceId: string, channel: Channel): Promise<{ accountDisplay: string | null; whatsappNumber: string | null }> {
+  const rows = await db
+    .select({ channel: channelAccounts.channel, handle: channelAccounts.handle, name: channelAccounts.name })
+    .from(channelAccounts)
+    .where(and(eq(channelAccounts.workspaceId, workspaceId), isNull(channelAccounts.disconnectedAt)))
+    .orderBy(channelAccounts.connectedAt);
+  const own = rows.find((r) => r.channel === channel);
+  const wa = rows.find((r) => r.channel === "whatsapp");
+  const accountDisplay = own ? (channel === "whatsapp" ? own.name || formatPhone(own.handle) : `@${own.handle}`) : null;
+  return { accountDisplay, whatsappNumber: wa?.handle ?? null };
 }
 
 export async function automationRoutes(app: FastifyInstance) {
@@ -207,13 +215,15 @@ export async function automationRoutes(app: FastifyInstance) {
       flow,
     };
     const event = input.resume ? (input.resume.state.context.origin as typeof input.event) ?? input.event : input.event;
+    const channel = input.resume ? ((input.resume.state.context.channel as Channel | undefined) ?? input.channel) : input.channel;
     return {
       result: await simulate({
         automations: [candidate],
         event,
+        channel,
         message: input.message,
         timezone: auth.workspace.timezone,
-        accountUsername: await primaryUsername(auth.workspace.id),
+        ...(await simulationAccounts(auth.workspace.id, channel)),
         contact: input.contact,
         tagNames: await tagNameMap(auth.workspace.id),
         resume: input.resume ? { automationId: automation.id, state: input.resume.state as any, reply: input.resume.reply } : undefined,
@@ -224,7 +234,7 @@ export async function automationRoutes(app: FastifyInstance) {
   /** Qual automação ativa responderia a esta mensagem? (usa o motor real de correspondência) */
   app.post("/automations/test-match", async (req) => {
     const auth = requireAuth(req);
-    const input = parse(simulateSchema.pick({ message: true, event: true }), req.body);
+    const input = parse(simulateSchema.pick({ message: true, event: true, channel: true }), req.body);
     const rows = await db
       .select()
       .from(automations)
@@ -236,9 +246,10 @@ export async function automationRoutes(app: FastifyInstance) {
       result: await simulate({
         automations: candidates,
         event: input.event,
+        channel: input.channel,
         message: input.message,
         timezone: auth.workspace.timezone,
-        accountUsername: await primaryUsername(auth.workspace.id),
+        ...(await simulationAccounts(auth.workspace.id, input.channel)),
         tagNames: await tagNameMap(auth.workspace.id),
       }),
     };

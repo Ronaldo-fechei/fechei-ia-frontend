@@ -4,6 +4,7 @@
  * o total por automação (dimension "a:<id>").
  */
 import { sql } from "drizzle-orm";
+import type { Channel, WhatsAppPricingCategory } from "@veloxia/shared";
 import { db, type DbOrTx } from "../db/client";
 import { analyticsDaily, workspaces } from "../db/schema";
 import { DEFAULT_TZ, localDay } from "../lib/time";
@@ -19,7 +20,12 @@ export type Metric =
   | "conversations_new"
   | "link_clicks"
   | "comments_in"
-  | "comment_dms";
+  | "comment_dms"
+  /** Por canal (ex.: messages_in_whatsapp). */
+  | `messages_in_${Channel}`
+  | `messages_out_auto_${Channel}`
+  /** WhatsApp: mensagens cobradas pela Meta por categoria (estimativa de consumo). */
+  | `wa_billable_${WhatsAppPricingCategory}`;
 
 const tzCache = new Map<string, { tz: string; at: number }>();
 
@@ -39,7 +45,7 @@ export function invalidateTimezone(workspaceId: string): void {
 export async function track(
   workspaceId: string,
   metric: Metric,
-  opts: { automationId?: string | null; value?: number; at?: Date } = {},
+  opts: { automationId?: string | null; value?: number; at?: Date; /** Dimensão extra (ex.: "c:<contaId>"). */ dimension?: string } = {},
   tx: DbOrTx = db,
 ): Promise<void> {
   const tz = await workspaceTimezone(workspaceId, tx);
@@ -47,6 +53,7 @@ export async function track(
   const value = opts.value ?? 1;
   const dims = [""];
   if (opts.automationId) dims.push(`a:${opts.automationId}`);
+  if (opts.dimension) dims.push(opts.dimension);
   for (const dimension of dims) {
     await tx
       .insert(analyticsDaily)

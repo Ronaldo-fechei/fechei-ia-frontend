@@ -9,7 +9,7 @@ import {
   automations,
   contacts,
   conversations,
-  instagramAccounts,
+  channelAccounts,
   links,
   messages,
 } from "../../db/schema";
@@ -139,8 +139,8 @@ export async function analyticsRoutes(app: FastifyInstance) {
     const [contactsTotal] = await db.select({ n: sql<number>`count(*)::int` }).from(contacts).where(eq(contacts.workspaceId, ws.id));
     const [accounts] = await db
       .select({ n: sql<number>`count(*)::int` })
-      .from(instagramAccounts)
-      .where(and(eq(instagramAccounts.workspaceId, ws.id), isNull(instagramAccounts.disconnectedAt)));
+      .from(channelAccounts)
+      .where(and(eq(channelAccounts.workspaceId, ws.id), isNull(channelAccounts.disconnectedAt)));
     const [firstMessage] = await db.select({ id: messages.id }).from(messages).where(eq(messages.workspaceId, ws.id)).limit(1);
 
     const recentActivity = await db

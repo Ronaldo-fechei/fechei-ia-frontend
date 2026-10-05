@@ -3,6 +3,7 @@ import {
   collectKeywordGroups,
   collectLinks,
   emptyFlow,
+  flowChannels,
   getTemplate,
   getTriggerNode,
   keywordKey,
@@ -11,14 +12,15 @@ import {
   quickToFlow,
   validateFlow,
   type Flow,
+  type FlowNode,
   type QuickAutomation,
   type TriggerEvent,
 } from "@veloxia/shared";
 import { db, type DbOrTx } from "../../db/client";
-import { automationExecutions, automations, automationTriggers, instagramAccounts, links, tags } from "../../db/schema";
+import { automationExecutions, automations, automationTriggers, channelAccounts, links, tags, whatsappTemplates } from "../../db/schema";
 import { AppError, badRequest, notFound } from "../../lib/errors";
 import { audit } from "../../services/audit";
-import { assertLimit, hasFeature } from "../billing/limits";
+import { assertFlowAllowed, assertLimit } from "../billing/limits";
 import { ensureTrackedLink } from "../../engine/executor";
 
 export type Automation = typeof automations.$inferSelect;
@@ -108,18 +110,18 @@ export interface CreateAutomationInput {
   faqQuestion?: string;
   priority?: number;
   cooldownSeconds?: number;
-  instagramAccountId?: string | null;
+  channelAccountId?: string | null;
   publish?: boolean;
 }
 
 async function assertAccount(workspaceId: string, accountId: string | null | undefined, tx: DbOrTx) {
   if (!accountId) return;
   const [row] = await tx
-    .select({ id: instagramAccounts.id })
-    .from(instagramAccounts)
-    .where(and(eq(instagramAccounts.id, accountId), eq(instagramAccounts.workspaceId, workspaceId)))
+    .select({ id: channelAccounts.id })
+    .from(channelAccounts)
+    .where(and(eq(channelAccounts.id, accountId), eq(channelAccounts.workspaceId, workspaceId)))
     .limit(1);
-  if (!row) throw badRequest("Conta do Instagram inválida.");
+  if (!row) throw badRequest("Conta de canal inválida.");
 }
 
 export function compileQuick(input: unknown): { quick: QuickAutomation; flow: Flow } {
@@ -135,7 +137,7 @@ export function compileQuick(input: unknown): { quick: QuickAutomation; flow: Fl
 
 export async function createAutomation(workspaceId: string, userId: string, input: CreateAutomationInput): Promise<Automation> {
   const automation = await db.transaction(async (tx) => {
-    await assertAccount(workspaceId, input.instagramAccountId, tx);
+    await assertAccount(workspaceId, input.channelAccountId, tx);
     let flow: Flow;
     let quickConfig: Record<string, unknown> | null = null;
     if (input.mode === "quick") {
@@ -154,13 +156,14 @@ export async function createAutomation(workspaceId: string, userId: string, inpu
       .insert(automations)
       .values({
         workspaceId,
-        instagramAccountId: input.instagramAccountId ?? null,
+        channelAccountId: input.channelAccountId ?? null,
         name: input.name.trim().slice(0, 80),
         description: input.description?.slice(0, 300) ?? "",
         kind: input.kind ?? "standard",
         mode: input.mode,
         status: "draft",
         triggerEvent: triggerEventOf(flow),
+        channels: flowChannels(flow),
         priority: input.priority ?? 0,
         cooldownSeconds: input.cooldownSeconds ?? ws?.default_cooldown_seconds ?? 60,
         draftFlow: flow,
@@ -194,7 +197,7 @@ export interface UpdateAutomationInput {
   description?: string;
   priority?: number;
   cooldownSeconds?: number;
-  instagramAccountId?: string | null;
+  channelAccountId?: string | null;
   quick?: unknown;
   draftFlow?: unknown;
   faqQuestion?: string;
@@ -205,13 +208,13 @@ export async function updateAutomation(workspaceId: string, userId: string, id: 
   const updated = await db.transaction(async (tx) => {
     const current = await getAutomationOrThrow(workspaceId, id, tx);
     if (current.status === "archived" && (input.quick || input.draftFlow)) throw badRequest("Restaure a automação antes de editá-la.");
-    await assertAccount(workspaceId, input.instagramAccountId, tx);
+    await assertAccount(workspaceId, input.channelAccountId, tx);
     const patch: Partial<typeof automations.$inferInsert> = { updatedAt: new Date() };
     if (input.name !== undefined) patch.name = input.name.trim().slice(0, 80);
     if (input.description !== undefined) patch.description = input.description.slice(0, 300);
     if (input.priority !== undefined) patch.priority = Math.max(-100, Math.min(100, Math.round(input.priority)));
     if (input.cooldownSeconds !== undefined) patch.cooldownSeconds = Math.max(0, Math.min(30 * 86400, Math.round(input.cooldownSeconds)));
-    if (input.instagramAccountId !== undefined) patch.instagramAccountId = input.instagramAccountId;
+    if (input.channelAccountId !== undefined) patch.channelAccountId = input.channelAccountId;
     if (input.faqQuestion !== undefined) patch.faqQuestion = input.faqQuestion.slice(0, 300);
 
     let draft: Flow | null = null;
@@ -231,7 +234,10 @@ export async function updateAutomation(workspaceId: string, userId: string, id: 
       await assertFlowOwnership(workspaceId, draft, tx);
       patch.draftFlow = draft;
       patch.hasUnpublishedChanges = true;
-      if (current.status === "draft") patch.triggerEvent = triggerEventOf(draft);
+      if (current.status === "draft") {
+        patch.triggerEvent = triggerEventOf(draft);
+        patch.channels = flowChannels(draft);
+      }
     }
     const [row] = await tx.update(automations).set(patch).where(eq(automations.id, id)).returning();
     // O índice de palavras-chave reflete o publicado (ou o rascunho, se nunca publicado).
@@ -248,8 +254,23 @@ async function assertPublishable(workspaceId: string, flow: Flow, current: Autom
   if (!validation.valid) {
     throw new AppError(422, "invalid_flow", validation.errors[0]?.message ?? "O fluxo tem erros.", { errors: validation.errors, warnings: validation.warnings });
   }
-  if (triggerEventOf(flow) === "comment" && !(await hasFeature(workspaceId, "comment_automations", tx))) {
-    throw new AppError(402, "limit_reached", "Seu plano não inclui automações de comentários.");
+  await assertFlowAllowed(workspaceId, flow, tx);
+  // Modelos do WhatsApp precisam estar aprovados pela Meta no momento da publicação.
+  const templateNodes = flow.nodes.filter((n) => n.type === "whatsapp_template") as FlowNode<"whatsapp_template">[];
+  if (templateNodes.length) {
+    const approved = await tx
+      .select({ name: whatsappTemplates.name, language: whatsappTemplates.language })
+      .from(whatsappTemplates)
+      .where(and(eq(whatsappTemplates.workspaceId, workspaceId), eq(whatsappTemplates.status, "APPROVED")));
+    const ok = new Set(approved.map((t) => `${t.name}|${t.language}`));
+    for (const node of templateNodes) {
+      if (!ok.has(`${node.data.templateName}|${node.data.language}`)) {
+        throw new AppError(422, "invalid_flow", `O modelo do WhatsApp "${node.data.templateName}" não está aprovado pela Meta. Escolha um modelo aprovado.`, {
+          errors: [{ nodeId: node.id, message: "Modelo do WhatsApp não aprovado." }],
+          warnings: [],
+        });
+      }
+    }
   }
   if (current?.status !== "active") await assertLimit(workspaceId, "active_automations", 1, tx);
 }
@@ -268,6 +289,7 @@ export async function publishAutomation(workspaceId: string, userId: string, id:
         flow,
         status: "active",
         triggerEvent: event,
+        channels: flowChannels(flow),
         version: sql`${automations.version} + 1`,
         publishedAt: new Date(),
         hasUnpublishedChanges: false,
@@ -315,13 +337,14 @@ export async function duplicateAutomation(workspaceId: string, userId: string, i
     .insert(automations)
     .values({
       workspaceId,
-      instagramAccountId: source.instagramAccountId,
+      channelAccountId: source.channelAccountId,
       name: `Cópia de ${source.name}`.slice(0, 80),
       description: source.description,
       kind: source.kind,
       mode: source.mode,
       status: "draft",
       triggerEvent: source.triggerEvent,
+      channels: source.channels,
       priority: source.priority,
       cooldownSeconds: source.cooldownSeconds,
       draftFlow: source.draftFlow,
@@ -395,7 +418,8 @@ export async function listAutomations(workspaceId: string, filters: ListFilters 
       triggerEvent: r.triggerEvent,
       priority: r.priority,
       cooldownSeconds: r.cooldownSeconds,
-      instagramAccountId: r.instagramAccountId,
+      channelAccountId: r.channelAccountId,
+      channels: r.channels,
       keywords: triggers.filter((t) => t.automationId === r.id).map((t) => t.keyword),
       actions,
       executionsCount: r.executionsCount,

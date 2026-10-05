@@ -1,7 +1,11 @@
 /**
- * Interface de canal: o motor de automação não conhece o Instagram.
- * Cada canal (Instagram hoje; outros no futuro) implementa este contrato.
+ * Contratos de canal: o motor de automação não conhece Instagram nem WhatsApp.
+ *
+ * - `ChannelAdapter`: envia conteúdo para um contato (implementado por canal).
+ * - `ChannelDriver` (ver channels/registry.ts): tudo que o restante do sistema
+ *   precisa saber sobre um canal (adaptador, perfil do contato, erros, desconexão).
  */
+import type { Channel } from "@veloxia/shared";
 
 export type OutboundContent =
   | { kind: "text"; text: string; quickReplies?: { title: string; payload: string }[] }
@@ -11,12 +15,22 @@ export type OutboundContent =
       kind: "buttons";
       text: string;
       buttons: ({ type: "url"; title: string; url: string } | { type: "postback"; title: string; payload: string })[];
+    }
+  | {
+      /** Modelo aprovado pela Meta (WhatsApp) — permitido fora da janela de 24h. */
+      kind: "template";
+      name: string;
+      language: string;
+      /** Texto já renderizado (para histórico e pré-visualização). */
+      previewText: string;
+      bodyParams: string[];
+      headerImageUrl?: string;
     };
 
 export interface SendTarget {
-  /** ID do contato no canal (IGSID no Instagram). */
+  /** ID do contato no canal (IGSID no Instagram, wa_id no WhatsApp). */
   contactExternalId: string;
-  /** Quando presente, envia como resposta privada a um comentário. */
+  /** Quando presente, envia como resposta privada a um comentário (Instagram). */
   commentId?: string;
 }
 
@@ -33,6 +47,7 @@ export type ChannelErrorKind =
   | "window"
   | "user_unavailable"
   | "already_replied"
+  | "payment"
   | "invalid"
   | "transient"
   | "unknown";
@@ -51,7 +66,7 @@ export class ChannelError extends Error {
 }
 
 export interface ChannelAdapter {
-  readonly channel: string;
+  readonly channel: Channel;
   send(target: SendTarget, content: OutboundContent): Promise<SendOutcome>;
   replyToComment?(commentId: string, text: string): Promise<{ id: string }>;
 }
@@ -67,5 +82,7 @@ export function contentPreview(content: OutboundContent): string {
       return "🎬 Vídeo";
     case "buttons":
       return content.text;
+    case "template":
+      return content.previewText || `Modelo: ${content.name}`;
   }
 }

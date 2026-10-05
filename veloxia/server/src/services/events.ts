@@ -18,7 +18,9 @@ export type WorkspaceEventType =
   | "contact.updated"
   | "execution.updated"
   | "notification.created"
-  | "instagram.updated";
+  | "channels.updated"
+  | "templates.updated"
+  | "billing.updated";
 
 export interface WorkspaceEvent {
   workspaceId: string;

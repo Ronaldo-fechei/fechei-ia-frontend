@@ -7,6 +7,7 @@ import { automationRoutes } from "./modules/automations/routes";
 import { crmRoutes } from "./modules/crm/routes";
 import { eventRoutes } from "./modules/events/routes";
 import { inboxRoutes } from "./modules/inbox/routes";
+import { channelRoutes } from "./modules/channels/routes";
 import { instagramRoutes } from "./modules/instagram/routes";
 import { mediaRoutes } from "./modules/media/routes";
 import { metaRoutes } from "./modules/meta/routes";
@@ -14,6 +15,7 @@ import { notificationRoutes } from "./modules/notifications/routes";
 import { settingsRoutes } from "./modules/settings/routes";
 import { systemRoutes } from "./modules/system/routes";
 import { webhookRoutes } from "./modules/webhooks/routes";
+import { whatsappRoutes } from "./modules/whatsapp/routes";
 
 /** API interna, organizada por domínio. */
 export async function apiRoutes(app: FastifyInstance) {
@@ -23,7 +25,9 @@ export async function apiRoutes(app: FastifyInstance) {
 
   await app.register(systemRoutes);
   await app.register(authRoutes);
+  await app.register(channelRoutes);
   await app.register(instagramRoutes);
+  await app.register(whatsappRoutes);
   await app.register(automationRoutes);
   await app.register(crmRoutes);
   await app.register(inboxRoutes);

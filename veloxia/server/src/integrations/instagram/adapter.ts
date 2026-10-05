@@ -4,6 +4,9 @@ import { ChannelError, type ChannelAdapter, type OutboundContent, type SendOutco
 import { GraphApiError, type InstagramClient, type OutboundMessage } from "./client";
 
 export function toInstagramMessage(content: OutboundContent): OutboundMessage {
+  if (content.kind === "template") {
+    throw new ChannelError("invalid", false, "Modelos de mensagem existem só no WhatsApp.", "invalid:template_on_instagram");
+  }
   const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
   switch (content.kind) {
     case "text":
@@ -43,7 +46,7 @@ export function toChannelError(err: unknown): ChannelError {
 }
 
 export class InstagramChannel implements ChannelAdapter {
-  readonly channel = "instagram";
+  readonly channel = "instagram" as const;
 
   constructor(private readonly client: InstagramClient) {}
 

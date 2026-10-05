@@ -2,7 +2,7 @@
  * Simulador ("Testar automação"): executa o mesmo motor em memória, sem
  * enviar mensagens nem alterar dados. Esperas são apenas relatadas.
  */
-import { type Flow } from "@veloxia/shared";
+import { flowChannels, formatPhone, phoneDigits, type Channel, type Flow } from "@veloxia/shared";
 import type { ExecutionContext, ExecutionStep } from "../db/schema";
 import type { OutboundContent } from "./channel";
 import { findMatches, type CandidateAutomation, type InboundEventKind } from "./matching";
@@ -39,24 +39,29 @@ export interface SimulationContactInput {
 
 class SimRuntime implements EngineRuntime {
   executionId = "simulacao";
-  accountUsername: string | null;
+  accountDisplay: string | null;
   outputs: SimOutput[] = [];
   contact;
+  /** Relógio virtual: esperas avançam o tempo (para simular a janela de 24h). */
+  offsetMs = 0;
 
   constructor(
     readonly automationId: string | null,
     readonly timezone: string,
-    accountUsername: string | null,
+    readonly channel: Channel,
+    accountDisplay: string | null,
     contact: SimulationContactInput,
     private readonly tagNames: Map<string, string>,
     origin: ExecutionContext["origin"],
+    private readonly whatsappNumber: string | null,
   ) {
-    this.accountUsername = accountUsername;
+    this.accountDisplay = accountDisplay;
     this.contact = {
       id: "contato-teste",
       externalId: "contato-teste",
       name: contact.name ?? "Contato de Teste",
-      username: contact.username ?? "contato.teste",
+      username: channel === "instagram" ? (contact.username ?? "contato.teste") : null,
+      phone: channel === "whatsapp" ? "5511988887777" : null,
       isFollower: contact.isFollower ?? null,
       // Em comentários a janela de 24h ainda não está aberta.
       lastInboundAt: origin === "comment" ? null : new Date(),
@@ -66,7 +71,7 @@ class SimRuntime implements EngineRuntime {
   }
 
   now() {
-    return new Date();
+    return new Date(Date.now() + this.offsetMs);
   }
 
   async send(content: OutboundContent, opts: { commentId?: string; nodeId: string }) {
@@ -83,6 +88,10 @@ class SimRuntime implements EngineRuntime {
   async trackedUrl(_n: string, _b: string | undefined, url: string) {
     return url;
   }
+  async whatsappLink(_accountId: string, prefill: string) {
+    if (!this.whatsappNumber) return null;
+    return `https://wa.me/${phoneDigits(this.whatsappNumber)}${prefill.trim() ? `?text=${encodeURIComponent(prefill.trim())}` : ""}`;
+  }
   tagName(id: string) {
     return this.tagNames.get(id) ?? id;
   }
@@ -91,10 +100,15 @@ class SimRuntime implements EngineRuntime {
 export interface SimulateInput {
   automations: CandidateAutomation[];
   event: InboundEventKind;
+  /** Canal simulado (padrão: Instagram). */
+  channel?: Channel;
   message: string;
   mediaId?: string;
   timezone: string;
-  accountUsername: string | null;
+  /** {{conta}} — "@loja" no Instagram ou o nome/número no WhatsApp. */
+  accountDisplay: string | null;
+  /** Número do WhatsApp conectado (para o bloco "Levar para o WhatsApp"). */
+  whatsappNumber?: string | null;
   contact?: SimulationContactInput;
   tagNames?: Map<string, string>;
   /** Continuação: automação, estado salvo e resposta do contato. */
@@ -109,14 +123,16 @@ export async function simulate(input: SimulateInput): Promise<SimulationResult> 
   let matchedKeyword: string | null = null;
   let alternatives: SimulationResult["alternatives"] = [];
   const origin: ExecutionContext["origin"] = input.event;
+  const channel: Channel = input.channel ?? "instagram";
+  const candidates = input.automations.filter((a) => flowChannels(a.flow).includes(channel));
 
   if (input.resume) {
-    automation = input.automations.find((a) => a.id === input.resume!.automationId);
+    automation = candidates.find((a) => a.id === input.resume!.automationId);
     if (!automation) return { matched: false, alternatives: [], outputs: [], steps: [], error: "Automação não encontrada para continuar o teste." };
     state = input.resume.state;
     resume = { kind: "input", text: input.resume.reply.text, payload: input.resume.reply.payload };
   } else {
-    const matches = findMatches({ kind: input.event, text: input.message, mediaId: input.mediaId }, input.automations);
+    const matches = findMatches({ kind: input.event, text: input.message, mediaId: input.mediaId }, candidates);
     alternatives = matches.slice(1).map((m) => ({ automationId: m.automation.id, automationName: m.automation.name, matchedKeyword: m.matchedKeyword }));
     const best = matches[0];
     if (!best) return { matched: false, alternatives: [], outputs: [], steps: [] };
@@ -124,13 +140,23 @@ export async function simulate(input: SimulateInput): Promise<SimulationResult> 
     matchedKeyword = best.matchedKeyword;
     state = {
       currentNodeId: best.startNodeId,
-      context: { origin, inboundText: input.message, ...(origin === "comment" ? { commentId: "comentario-teste" } : {}) },
+      context: { origin, channel, inboundText: input.message, ...(origin === "comment" ? { commentId: "comentario-teste" } : {}) },
       steps: [],
     };
     resume = { kind: "start" };
   }
 
-  const rt = new SimRuntime(automation.id, input.timezone, input.accountUsername, input.contact ?? {}, tagNames, state.context.origin);
+  const accountDisplay = input.accountDisplay ?? (channel === "whatsapp" ? formatPhone("5511999990000") : "@sua_conta");
+  const rt = new SimRuntime(
+    automation.id,
+    input.timezone,
+    channel,
+    accountDisplay,
+    input.contact ?? {},
+    tagNames,
+    state.context.origin,
+    input.whatsappNumber ?? null,
+  );
   // Ao responder, o contato abre a janela de 24h (inclusive em fluxos de comentário).
   if (input.resume) rt.contact.lastInboundAt = new Date();
   const flow: Flow = automation.flow;
@@ -138,6 +164,7 @@ export async function simulate(input: SimulateInput): Promise<SimulationResult> 
 
   // Esperas de tempo são puladas na simulação (e anotadas nos passos).
   for (let i = 0; i < 20 && result.status === "waiting" && (result.waitType === "delay" || result.waitType === "retry"); i++) {
+    if (result.waitType === "delay") rt.offsetMs += Math.max(0, result.waitUntil.getTime() - rt.now().getTime());
     result = await runFlow(flow, result.state, rt, { kind: result.waitType });
   }
 

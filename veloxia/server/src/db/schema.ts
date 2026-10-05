@@ -21,7 +21,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { Flow, PlanLimits } from "@veloxia/shared";
+import type { BillingCycle, Channel, Flow, PlanLimits } from "@veloxia/shared";
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
 const createdAt = () => ts("created_at").notNull().defaultNow();
@@ -123,7 +123,7 @@ export const oauthStates = pgTable("oauth_states", {
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  returnTo: text("return_to").notNull().default("/app/instagram"),
+  returnTo: text("return_to").notNull().default("/app/canais"),
   expiresAt: ts("expires_at").notNull(),
   usedAt: ts("used_at"),
   createdAt: createdAt(),
@@ -137,11 +137,21 @@ export const plans = pgTable("plans", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description").notNull().default(""),
+  /** Preço de tabela mensal. */
   priceCents: integer("price_cents").notNull().default(0),
+  /** Preço do plano anual (cobrado de uma vez). null = sem opção anual. */
+  annualPriceCents: integer("annual_price_cents"),
+  /** Preço promocional dos primeiros meses (ex.: lançamento). */
+  promoPriceCents: integer("promo_price_cents"),
+  promoMonths: integer("promo_months").notNull().default(0),
   currency: text("currency").notNull().default("BRL"),
   interval: text("interval").$type<"month" | "year">().notNull().default("month"),
   limits: jsonb("limits").$type<PlanLimits["limits"]>().notNull().default({}),
   features: jsonb("features").$type<PlanLimits["features"]>().notNull().default({}),
+  /** Itens exibidos na tabela de preços (editáveis sem deploy). */
+  perks: jsonb("perks").$type<string[]>().notNull().default([]),
+  /** Plano em destaque na tabela de preços. */
+  highlighted: boolean("highlighted").notNull().default(false),
   isPublic: boolean("is_public").notNull().default(true),
   isDefault: boolean("is_default").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
@@ -167,9 +177,46 @@ export const subscriptions = pgTable("subscriptions", {
   provider: text("provider"),
   providerCustomerId: text("provider_customer_id"),
   providerSubscriptionId: text("provider_subscription_id"),
+  /** Situação no provedor de pagamento (ex.: authorized, paused, cancelled). */
+  providerStatus: text("provider_status"),
+  billingCycle: text("billing_cycle").$type<BillingCycle>().notNull().default("monthly"),
+  /** Valor cobrado atualmente (centavos) — pode ser o promocional. */
+  amountCents: integer("amount_cents"),
+  /** Fim do preço promocional: depois disso o valor passa ao preço de tabela. */
+  promoEndsAt: ts("promo_ends_at"),
+  lastPaymentAt: ts("last_payment_at"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+/** Pedidos de checkout e pagamentos recebidos do provedor (Mercado Pago). */
+export const billingPayments = pgTable(
+  "billing_payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    /** Referência enviada ao provedor (identifica este pedido nos webhooks). */
+    reference: text("reference").notNull().unique(),
+    kind: text("kind").$type<"subscription" | "one_time">().notNull(),
+    planId: text("plan_id")
+      .notNull()
+      .references(() => plans.id),
+    billingCycle: text("billing_cycle").$type<BillingCycle>().notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    status: text("status").$type<"pending" | "approved" | "rejected" | "cancelled" | "refunded">().notNull().default("pending"),
+    providerId: text("provider_id"),
+    providerPaymentIds: text("provider_payment_ids").array().notNull().default(sql`'{}'::text[]`),
+    checkoutUrl: text("checkout_url"),
+    paidAt: ts("paid_at"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("billing_payments_workspace_idx").on(t.workspaceId, t.createdAt), index("billing_payments_provider_idx").on(t.providerId)],
+);
 
 export const usageCounters = pgTable(
   "usage_counters",
@@ -185,33 +232,50 @@ export const usageCounters = pgTable(
 );
 
 /* ------------------------------------------------------------------ */
-/* Instagram                                                           */
+/* Canais conectados (Instagram, WhatsApp e futuros)                    */
 /* ------------------------------------------------------------------ */
 
-export type InstagramAccountStatus = "connected" | "token_expired" | "error" | "disconnected";
+export type ChannelAccountStatus = "connected" | "token_expired" | "error" | "disconnected";
 
-export const instagramAccounts = pgTable(
-  "instagram_accounts",
+/** Dados específicos de cada canal (sem segredos). */
+export interface ChannelAccountMetadata {
+  /** WhatsApp: conta do WhatsApp Business (WABA) e empresa no Gerenciador de Negócios. */
+  wabaId?: string;
+  businessId?: string;
+  displayPhoneNumber?: string;
+  qualityRating?: string;
+  messagingLimitTier?: string;
+  nameStatus?: string;
+  /** WhatsApp: número também usado no app WhatsApp Business (coexistência). */
+  coexistence?: boolean;
+}
+
+export const channelAccounts = pgTable(
+  "channel_accounts",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
-    /** ID da conta profissional (usado nos webhooks e no envio de mensagens). */
-    igUserId: text("ig_user_id").notNull(),
-    /** ID com escopo do app retornado em /me (id). */
-    igScopedId: text("ig_scoped_id"),
-    username: text("username").notNull(),
+    channel: text("channel").$type<Channel>().notNull(),
+    /** Instagram: ID da conta profissional. WhatsApp: ID do número (phone_number_id). */
+    externalId: text("external_id").notNull(),
+    /** Instagram: ID com escopo do app retornado em /me. */
+    scopedId: text("scoped_id"),
+    /** Instagram: usuário (sem @). WhatsApp: número exibido. */
+    handle: text("handle").notNull(),
+    /** Instagram: nome do perfil. WhatsApp: nome verificado do número. */
     name: text("name"),
     profilePictureUrl: text("profile_picture_url"),
     accountType: text("account_type"),
     followersCount: integer("followers_count"),
     mediaCount: integer("media_count"),
+    metadata: jsonb("metadata").$type<ChannelAccountMetadata>().notNull().default({}),
     accessTokenEnc: text("access_token_enc"),
     tokenExpiresAt: ts("token_expires_at"),
     tokenRefreshedAt: ts("token_refreshed_at"),
     scopes: text("scopes").array().notNull().default(sql`'{}'::text[]`),
-    status: text("status").$type<InstagramAccountStatus>().notNull().default("connected"),
+    status: text("status").$type<ChannelAccountStatus>().notNull().default("connected"),
     webhookSubscribedAt: ts("webhook_subscribed_at"),
     webhookError: text("webhook_error"),
     lastError: text("last_error"),
@@ -224,10 +288,37 @@ export const instagramAccounts = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    uniqueIndex("instagram_accounts_active_ig_user_uq").on(t.igUserId).where(sql`${t.disconnectedAt} is null`),
-    index("instagram_accounts_workspace_idx").on(t.workspaceId),
-    index("instagram_accounts_scoped_idx").on(t.igScopedId),
+    uniqueIndex("channel_accounts_active_external_uq").on(t.channel, t.externalId).where(sql`${t.disconnectedAt} is null`),
+    index("channel_accounts_workspace_idx").on(t.workspaceId),
+    index("channel_accounts_scoped_idx").on(t.scopedId),
   ],
+);
+
+/** Modelos de mensagem do WhatsApp (sincronizados com a conta do WhatsApp Business). */
+export const whatsappTemplates = pgTable(
+  "whatsapp_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    channelAccountId: uuid("channel_account_id")
+      .notNull()
+      .references(() => channelAccounts.id, { onDelete: "cascade" }),
+    wabaId: text("waba_id").notNull(),
+    externalId: text("external_id"),
+    name: text("name").notNull(),
+    language: text("language").notNull(),
+    category: text("category").notNull(),
+    status: text("status").notNull(),
+    rejectedReason: text("rejected_reason"),
+    components: jsonb("components").$type<Record<string, unknown>[]>().notNull().default([]),
+    bodyText: text("body_text").notNull().default(""),
+    syncedAt: ts("synced_at").notNull().defaultNow(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("whatsapp_templates_account_name_lang_uq").on(t.channelAccountId, t.name, t.language)],
 );
 
 /* ------------------------------------------------------------------ */
@@ -241,12 +332,16 @@ export const contacts = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
-    instagramAccountId: uuid("instagram_account_id")
+    channelAccountId: uuid("channel_account_id")
       .notNull()
-      .references(() => instagramAccounts.id, { onDelete: "cascade" }),
-    /** ID do usuário com escopo do Instagram (IGSID). */
-    igsid: text("igsid").notNull(),
+      .references(() => channelAccounts.id, { onDelete: "cascade" }),
+    channel: text("channel").$type<Channel>().notNull(),
+    /** ID do contato no canal: IGSID no Instagram, wa_id (telefone) no WhatsApp. */
+    externalId: text("external_id").notNull(),
+    /** Instagram: @usuario (sem @). */
     username: text("username"),
+    /** WhatsApp: telefone com DDI (dígitos). */
+    phone: text("phone"),
     name: text("name"),
     profilePicUrl: text("profile_pic_url"),
     followerCount: integer("follower_count"),
@@ -265,8 +360,9 @@ export const contacts = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    uniqueIndex("contacts_account_igsid_uq").on(t.instagramAccountId, t.igsid),
+    uniqueIndex("contacts_account_external_uq").on(t.channelAccountId, t.externalId),
     index("contacts_workspace_last_idx").on(t.workspaceId, t.lastInteractionAt),
+    index("contacts_workspace_inbound_idx").on(t.workspaceId, t.lastInboundAt),
   ],
 );
 
@@ -347,9 +443,10 @@ export const conversations = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
-    instagramAccountId: uuid("instagram_account_id")
+    channelAccountId: uuid("channel_account_id")
       .notNull()
-      .references(() => instagramAccounts.id, { onDelete: "cascade" }),
+      .references(() => channelAccounts.id, { onDelete: "cascade" }),
+    channel: text("channel").$type<Channel>().notNull(),
     contactId: uuid("contact_id")
       .notNull()
       .unique()
@@ -369,7 +466,8 @@ export const conversations = pgTable(
 );
 
 export type MessageDirection = "inbound" | "outbound";
-export type MessageSource = "contact" | "automation" | "agent" | "instagram_app" | "system";
+/** native_app: enviada pelo app oficial (Instagram ou WhatsApp Business) e recebida por eco. */
+export type MessageSource = "contact" | "automation" | "agent" | "native_app" | "system";
 
 export const messages = pgTable(
   "messages",
@@ -384,16 +482,16 @@ export const messages = pgTable(
     contactId: uuid("contact_id")
       .notNull()
       .references(() => contacts.id, { onDelete: "cascade" }),
-    instagramAccountId: uuid("instagram_account_id")
+    channelAccountId: uuid("channel_account_id")
       .notNull()
-      .references(() => instagramAccounts.id, { onDelete: "cascade" }),
+      .references(() => channelAccounts.id, { onDelete: "cascade" }),
     direction: text("direction").$type<MessageDirection>().notNull(),
     source: text("source").$type<MessageSource>().notNull(),
     type: text("type").notNull().default("text"),
     text: text("text"),
     payload: jsonb("payload").$type<Record<string, unknown>>(),
     externalId: text("external_id"),
-    status: text("status").$type<"received" | "sending" | "sent" | "failed" | "deleted">().notNull(),
+    status: text("status").$type<"received" | "sending" | "sent" | "delivered" | "read" | "failed" | "deleted">().notNull(),
     errorCode: text("error_code"),
     errorMessage: text("error_message"),
     executionId: uuid("execution_id"),
@@ -402,7 +500,7 @@ export const messages = pgTable(
     sentAt: ts("sent_at"),
   },
   (t) => [
-    uniqueIndex("messages_account_external_uq").on(t.instagramAccountId, t.externalId).where(sql`${t.externalId} is not null`),
+    uniqueIndex("messages_account_external_uq").on(t.channelAccountId, t.externalId).where(sql`${t.externalId} is not null`),
     index("messages_conversation_idx").on(t.conversationId, t.createdAt),
     index("messages_workspace_created_idx").on(t.workspaceId, t.createdAt),
     index("messages_execution_idx").on(t.executionId),
@@ -420,8 +518,10 @@ export const automations = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
-    /** Conta específica (null = todas as contas do espaço de trabalho). */
-    instagramAccountId: uuid("instagram_account_id").references(() => instagramAccounts.id, { onDelete: "set null" }),
+    /** Conta específica (null = todas as contas dos canais da automação). */
+    channelAccountId: uuid("channel_account_id").references(() => channelAccounts.id, { onDelete: "set null" }),
+    /** Canais em que a automação responde (derivado do gatilho do fluxo publicado/rascunho). */
+    channels: text("channels").array().$type<Channel[]>().notNull().default(sql`'{instagram}'::text[]`),
     name: text("name").notNull(),
     description: text("description").notNull().default(""),
     kind: text("kind").$type<"standard" | "faq">().notNull().default("standard"),
@@ -482,6 +582,7 @@ export interface ExecutionStep {
 
 export interface ExecutionContext {
   origin: "dm" | "comment" | "story_reply" | "story_mention" | "postback" | "test";
+  channel?: Channel;
   commentId?: string;
   privateReplyUsed?: boolean;
   publicReplyDone?: boolean;
@@ -501,7 +602,8 @@ export const automationExecutions = pgTable(
       .references(() => workspaces.id, { onDelete: "cascade" }),
     automationId: uuid("automation_id").references(() => automations.id, { onDelete: "set null" }),
     automationName: text("automation_name").notNull(),
-    instagramAccountId: uuid("instagram_account_id").references(() => instagramAccounts.id, { onDelete: "cascade" }),
+    channelAccountId: uuid("channel_account_id").references(() => channelAccounts.id, { onDelete: "cascade" }),
+    channel: text("channel").$type<Channel>().notNull().default("instagram"),
     contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "cascade" }),
     conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "cascade" }),
     triggerEvent: text("trigger_event").notNull(),
@@ -545,9 +647,9 @@ export const commentEvents = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
-    instagramAccountId: uuid("instagram_account_id")
+    channelAccountId: uuid("channel_account_id")
       .notNull()
-      .references(() => instagramAccounts.id, { onDelete: "cascade" }),
+      .references(() => channelAccounts.id, { onDelete: "cascade" }),
     commentId: text("comment_id").notNull().unique(),
     mediaId: text("media_id"),
     mediaProductType: text("media_product_type"),

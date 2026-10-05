@@ -4,7 +4,7 @@ import { z } from "zod";
 import { APP_NAME } from "@veloxia/shared";
 import { adminEmails, emailConfigured, env } from "../../config/env";
 import { db } from "../../db/client";
-import { instagramAccounts, passwordResetTokens, sessions, users, workspaces } from "../../db/schema";
+import { channelAccounts, passwordResetTokens, sessions, users, workspaces } from "../../db/schema";
 import { hashPassword, hashToken, randomToken, verifyPassword } from "../../lib/crypto";
 import { AppError, badRequest, conflict, tooMany, unauthorized } from "../../lib/errors";
 import { emailSchema, parse, passwordSchema, uuidParam } from "../../lib/validation";
@@ -13,7 +13,7 @@ import { layoutEmail, sendEmail } from "../../services/email";
 import { clearSessionCookie, createSession, requireAuth } from "../../plugins/auth";
 import { getUsage, getWorkspacePlan } from "../billing/limits";
 import { createWorkspaceForUser } from "../workspaces/bootstrap";
-import { disconnectAccount } from "../instagram/service";
+import { disconnectAccount } from "../../channels/accounts";
 
 const MAX_FAILED_LOGINS = 10;
 const LOCK_MINUTES = 15;
@@ -227,7 +227,7 @@ export async function authRoutes(app: FastifyInstance) {
     const [user] = await db.select().from(users).where(eq(users.id, auth.user.id)).limit(1);
     if (!(await verifyPassword(input.password, user.passwordHash))) throw badRequest("Senha incorreta.");
     if (auth.memberRole !== "owner") throw new AppError(403, "forbidden", "Apenas o dono do espaço de trabalho pode excluir a conta.");
-    const accounts = await db.select().from(instagramAccounts).where(eq(instagramAccounts.workspaceId, auth.workspace.id));
+    const accounts = await db.select().from(channelAccounts).where(eq(channelAccounts.workspaceId, auth.workspace.id));
     for (const account of accounts) {
       if (!account.disconnectedAt) await disconnectAccount(account.id, { userId: user.id, reason: "account_deleted" }).catch(() => undefined);
     }

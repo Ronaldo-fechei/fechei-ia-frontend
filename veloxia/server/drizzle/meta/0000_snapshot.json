@@ -1,5 +1,5 @@
 {
-  "id": "43ed3b91-8012-4831-85ec-8d3345b43dd4",
+  "id": "d87456d0-fdda-4e3a-b9b6-109cb9261e67",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -344,11 +344,18 @@
           "primaryKey": false,
           "notNull": true
         },
-        "instagram_account_id": {
-          "name": "instagram_account_id",
+        "channel_account_id": {
+          "name": "channel_account_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "channel": {
+          "name": "channel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'instagram'"
         },
         "contact_id": {
           "name": "contact_id",
@@ -635,12 +642,12 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "automation_executions_instagram_account_id_instagram_accounts_id_fk": {
-          "name": "automation_executions_instagram_account_id_instagram_accounts_id_fk",
+        "automation_executions_channel_account_id_channel_accounts_id_fk": {
+          "name": "automation_executions_channel_account_id_channel_accounts_id_fk",
           "tableFrom": "automation_executions",
-          "tableTo": "instagram_accounts",
+          "tableTo": "channel_accounts",
           "columnsFrom": [
-            "instagram_account_id"
+            "channel_account_id"
           ],
           "columnsTo": [
             "id"
@@ -839,11 +846,18 @@
           "primaryKey": false,
           "notNull": true
         },
-        "instagram_account_id": {
-          "name": "instagram_account_id",
+        "channel_account_id": {
+          "name": "channel_account_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "channels": {
+          "name": "channels",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{instagram}'::text[]"
         },
         "name": {
           "name": "name",
@@ -1021,12 +1035,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "automations_instagram_account_id_instagram_accounts_id_fk": {
-          "name": "automations_instagram_account_id_instagram_accounts_id_fk",
+        "automations_channel_account_id_channel_accounts_id_fk": {
+          "name": "automations_channel_account_id_channel_accounts_id_fk",
           "tableFrom": "automations",
-          "tableTo": "instagram_accounts",
+          "tableTo": "channel_accounts",
           "columnsFrom": [
-            "instagram_account_id"
+            "channel_account_id"
           ],
           "columnsTo": [
             "id"
@@ -1040,6 +1054,467 @@
           "tableTo": "users",
           "columnsFrom": [
             "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.billing_payments": {
+      "name": "billing_payments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reference": {
+          "name": "reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "plan_id": {
+          "name": "plan_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "billing_cycle": {
+          "name": "billing_cycle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_cents": {
+          "name": "amount_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "provider_id": {
+          "name": "provider_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider_payment_ids": {
+          "name": "provider_payment_ids",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "checkout_url": {
+          "name": "checkout_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "paid_at": {
+          "name": "paid_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "billing_payments_workspace_idx": {
+          "name": "billing_payments_workspace_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "billing_payments_provider_idx": {
+          "name": "billing_payments_provider_idx",
+          "columns": [
+            {
+              "expression": "provider_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "billing_payments_workspace_id_workspaces_id_fk": {
+          "name": "billing_payments_workspace_id_workspaces_id_fk",
+          "tableFrom": "billing_payments",
+          "tableTo": "workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "billing_payments_plan_id_plans_id_fk": {
+          "name": "billing_payments_plan_id_plans_id_fk",
+          "tableFrom": "billing_payments",
+          "tableTo": "plans",
+          "columnsFrom": [
+            "plan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "billing_payments_created_by_user_id_users_id_fk": {
+          "name": "billing_payments_created_by_user_id_users_id_fk",
+          "tableFrom": "billing_payments",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "billing_payments_reference_unique": {
+          "name": "billing_payments_reference_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "reference"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.channel_accounts": {
+      "name": "channel_accounts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "channel": {
+          "name": "channel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_id": {
+          "name": "external_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scoped_id": {
+          "name": "scoped_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "handle": {
+          "name": "handle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "profile_picture_url": {
+          "name": "profile_picture_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "account_type": {
+          "name": "account_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "followers_count": {
+          "name": "followers_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "media_count": {
+          "name": "media_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "access_token_enc": {
+          "name": "access_token_enc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "token_expires_at": {
+          "name": "token_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "token_refreshed_at": {
+          "name": "token_refreshed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scopes": {
+          "name": "scopes",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'connected'"
+        },
+        "webhook_subscribed_at": {
+          "name": "webhook_subscribed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "webhook_error": {
+          "name": "webhook_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_error_at": {
+          "name": "last_error_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_webhook_at": {
+          "name": "last_webhook_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "connected_at": {
+          "name": "connected_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "disconnected_at": {
+          "name": "disconnected_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "connected_by_user_id": {
+          "name": "connected_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "channel_accounts_active_external_uq": {
+          "name": "channel_accounts_active_external_uq",
+          "columns": [
+            {
+              "expression": "channel",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "external_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"channel_accounts\".\"disconnected_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "channel_accounts_workspace_idx": {
+          "name": "channel_accounts_workspace_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "channel_accounts_scoped_idx": {
+          "name": "channel_accounts_scoped_idx",
+          "columns": [
+            {
+              "expression": "scoped_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "channel_accounts_workspace_id_workspaces_id_fk": {
+          "name": "channel_accounts_workspace_id_workspaces_id_fk",
+          "tableFrom": "channel_accounts",
+          "tableTo": "workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "channel_accounts_connected_by_user_id_users_id_fk": {
+          "name": "channel_accounts_connected_by_user_id_users_id_fk",
+          "tableFrom": "channel_accounts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "connected_by_user_id"
           ],
           "columnsTo": [
             "id"
@@ -1071,8 +1546,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "instagram_account_id": {
-          "name": "instagram_account_id",
+        "channel_account_id": {
+          "name": "channel_account_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -1235,12 +1710,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "comment_events_instagram_account_id_instagram_accounts_id_fk": {
-          "name": "comment_events_instagram_account_id_instagram_accounts_id_fk",
+        "comment_events_channel_account_id_channel_accounts_id_fk": {
+          "name": "comment_events_channel_account_id_channel_accounts_id_fk",
           "tableFrom": "comment_events",
-          "tableTo": "instagram_accounts",
+          "tableTo": "channel_accounts",
           "columnsFrom": [
-            "instagram_account_id"
+            "channel_account_id"
           ],
           "columnsTo": [
             "id"
@@ -1415,20 +1890,32 @@
           "primaryKey": false,
           "notNull": true
         },
-        "instagram_account_id": {
-          "name": "instagram_account_id",
+        "channel_account_id": {
+          "name": "channel_account_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "igsid": {
-          "name": "igsid",
+        "channel": {
+          "name": "channel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_id": {
+          "name": "external_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
         "username": {
           "name": "username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "phone": {
+          "name": "phone",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -1531,17 +2018,17 @@
         }
       },
       "indexes": {
-        "contacts_account_igsid_uq": {
-          "name": "contacts_account_igsid_uq",
+        "contacts_account_external_uq": {
+          "name": "contacts_account_external_uq",
           "columns": [
             {
-              "expression": "instagram_account_id",
+              "expression": "channel_account_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             },
             {
-              "expression": "igsid",
+              "expression": "external_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1572,6 +2059,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "contacts_workspace_inbound_idx": {
+          "name": "contacts_workspace_inbound_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "last_inbound_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -1588,12 +2096,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "contacts_instagram_account_id_instagram_accounts_id_fk": {
-          "name": "contacts_instagram_account_id_instagram_accounts_id_fk",
+        "contacts_channel_account_id_channel_accounts_id_fk": {
+          "name": "contacts_channel_account_id_channel_accounts_id_fk",
           "tableFrom": "contacts",
-          "tableTo": "instagram_accounts",
+          "tableTo": "channel_accounts",
           "columnsFrom": [
-            "instagram_account_id"
+            "channel_account_id"
           ],
           "columnsTo": [
             "id"
@@ -1625,9 +2133,15 @@
           "primaryKey": false,
           "notNull": true
         },
-        "instagram_account_id": {
-          "name": "instagram_account_id",
+        "channel_account_id": {
+          "name": "channel_account_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "channel": {
+          "name": "channel",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -1740,12 +2254,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "conversations_instagram_account_id_instagram_accounts_id_fk": {
-          "name": "conversations_instagram_account_id_instagram_accounts_id_fk",
+        "conversations_channel_account_id_channel_accounts_id_fk": {
+          "name": "conversations_channel_account_id_channel_accounts_id_fk",
           "tableFrom": "conversations",
-          "tableTo": "instagram_accounts",
+          "tableTo": "channel_accounts",
           "columnsFrom": [
-            "instagram_account_id"
+            "channel_account_id"
           ],
           "columnsTo": [
             "id"
@@ -2037,249 +2551,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.instagram_accounts": {
-      "name": "instagram_accounts",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "workspace_id": {
-          "name": "workspace_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ig_user_id": {
-          "name": "ig_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ig_scoped_id": {
-          "name": "ig_scoped_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "username": {
-          "name": "username",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "profile_picture_url": {
-          "name": "profile_picture_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "account_type": {
-          "name": "account_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "followers_count": {
-          "name": "followers_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "media_count": {
-          "name": "media_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "access_token_enc": {
-          "name": "access_token_enc",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "token_expires_at": {
-          "name": "token_expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "token_refreshed_at": {
-          "name": "token_refreshed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "scopes": {
-          "name": "scopes",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::text[]"
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'connected'"
-        },
-        "webhook_subscribed_at": {
-          "name": "webhook_subscribed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "webhook_error": {
-          "name": "webhook_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_error": {
-          "name": "last_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_error_at": {
-          "name": "last_error_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_webhook_at": {
-          "name": "last_webhook_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "connected_at": {
-          "name": "connected_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "disconnected_at": {
-          "name": "disconnected_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "connected_by_user_id": {
-          "name": "connected_by_user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "instagram_accounts_active_ig_user_uq": {
-          "name": "instagram_accounts_active_ig_user_uq",
-          "columns": [
-            {
-              "expression": "ig_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"instagram_accounts\".\"disconnected_at\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "instagram_accounts_workspace_idx": {
-          "name": "instagram_accounts_workspace_idx",
-          "columns": [
-            {
-              "expression": "workspace_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "instagram_accounts_scoped_idx": {
-          "name": "instagram_accounts_scoped_idx",
-          "columns": [
-            {
-              "expression": "ig_scoped_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "instagram_accounts_workspace_id_workspaces_id_fk": {
-          "name": "instagram_accounts_workspace_id_workspaces_id_fk",
-          "tableFrom": "instagram_accounts",
-          "tableTo": "workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "instagram_accounts_connected_by_user_id_users_id_fk": {
-          "name": "instagram_accounts_connected_by_user_id_users_id_fk",
-          "tableFrom": "instagram_accounts",
-          "tableTo": "users",
-          "columnsFrom": [
-            "connected_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -2835,8 +3106,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "instagram_account_id": {
-          "name": "instagram_account_id",
+        "channel_account_id": {
+          "name": "channel_account_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -2927,7 +3198,7 @@
           "name": "messages_account_external_uq",
           "columns": [
             {
-              "expression": "instagram_account_id",
+              "expression": "channel_account_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3043,12 +3314,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "messages_instagram_account_id_instagram_accounts_id_fk": {
-          "name": "messages_instagram_account_id_instagram_accounts_id_fk",
+        "messages_channel_account_id_channel_accounts_id_fk": {
+          "name": "messages_channel_account_id_channel_accounts_id_fk",
           "tableFrom": "messages",
-          "tableTo": "instagram_accounts",
+          "tableTo": "channel_accounts",
           "columnsFrom": [
-            "instagram_account_id"
+            "channel_account_id"
           ],
           "columnsTo": [
             "id"
@@ -3223,7 +3494,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'/app/instagram'"
+          "default": "'/app/canais'"
         },
         "expires_at": {
           "name": "expires_at",
@@ -3413,6 +3684,25 @@
           "notNull": true,
           "default": 0
         },
+        "annual_price_cents": {
+          "name": "annual_price_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "promo_price_cents": {
+          "name": "promo_price_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "promo_months": {
+          "name": "promo_months",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "currency": {
           "name": "currency",
           "type": "text",
@@ -3440,6 +3730,20 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'{}'::jsonb"
+        },
+        "perks": {
+          "name": "perks",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "highlighted": {
+          "name": "highlighted",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "is_public": {
           "name": "is_public",
@@ -3669,6 +3973,37 @@
         "provider_subscription_id": {
           "name": "provider_subscription_id",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider_status": {
+          "name": "provider_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "billing_cycle": {
+          "name": "billing_cycle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'monthly'"
+        },
+        "amount_cents": {
+          "name": "amount_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "promo_ends_at": {
+          "name": "promo_ends_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_payment_at": {
+          "name": "last_payment_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -4158,6 +4493,170 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.whatsapp_templates": {
+      "name": "whatsapp_templates",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "channel_account_id": {
+          "name": "channel_account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "waba_id": {
+          "name": "waba_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_id": {
+          "name": "external_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "language": {
+          "name": "language",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rejected_reason": {
+          "name": "rejected_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "components": {
+          "name": "components",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "body_text": {
+          "name": "body_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "synced_at": {
+          "name": "synced_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "whatsapp_templates_account_name_lang_uq": {
+          "name": "whatsapp_templates_account_name_lang_uq",
+          "columns": [
+            {
+              "expression": "channel_account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "language",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "whatsapp_templates_workspace_id_workspaces_id_fk": {
+          "name": "whatsapp_templates_workspace_id_workspaces_id_fk",
+          "tableFrom": "whatsapp_templates",
+          "tableTo": "workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "whatsapp_templates_channel_account_id_channel_accounts_id_fk": {
+          "name": "whatsapp_templates_channel_account_id_channel_accounts_id_fk",
+          "tableFrom": "whatsapp_templates",
+          "tableTo": "channel_accounts",
+          "columnsFrom": [
+            "channel_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

@@ -11,7 +11,7 @@ import {
   conversations,
   customFields,
   customFieldValues,
-  instagramAccounts,
+  channelAccounts,
   messages,
   tags,
 } from "../../db/schema";
@@ -165,7 +165,15 @@ export async function crmRoutes(app: FastifyInstance) {
     const where: SQL[] = [eq(contacts.workspaceId, auth.workspace.id)];
     if (q.q) {
       const term = `%${q.q.replace(/[%_@]/g, "")}%`;
-      where.push(or(ilike(contacts.username, term), ilike(contacts.name, term), eq(contacts.igsid, q.q)) as SQL);
+      const digits = q.q.replace(/\D/g, "");
+      where.push(
+        or(
+          ilike(contacts.username, term),
+          ilike(contacts.name, term),
+          eq(contacts.externalId, q.q),
+          ...(digits.length >= 4 ? [ilike(contacts.phone, `%${digits}%`)] : []),
+        ) as SQL,
+      );
     }
     if (q.tagId) where.push(sql`exists (select 1 from contact_tags ct where ct.contact_id = ${contacts.id} and ct.tag_id = ${q.tagId})`);
     if (q.source) where.push(eq(contacts.source, q.source));
@@ -211,9 +219,9 @@ export async function crmRoutes(app: FastifyInstance) {
       .orderBy(desc(sql`max(${automationExecutions.startedAt})`));
     const [conversation] = await db.select().from(conversations).where(eq(conversations.contactId, id)).limit(1);
     const [account] = await db
-      .select({ username: instagramAccounts.username })
-      .from(instagramAccounts)
-      .where(eq(instagramAccounts.id, contact.instagramAccountId))
+      .select({ handle: channelAccounts.handle, channel: channelAccounts.channel, name: channelAccounts.name })
+      .from(channelAccounts)
+      .where(eq(channelAccounts.id, contact.channelAccountId))
       .limit(1);
     const [counts] = await db
       .select({ inbound: sql<number>`count(*) filter (where ${messages.direction} = 'inbound')::int`, outbound: sql<number>`count(*) filter (where ${messages.direction} = 'outbound')::int` })
@@ -224,7 +232,8 @@ export async function crmRoutes(app: FastifyInstance) {
       fields,
       automations: automationsTriggered,
       conversation: conversation ?? null,
-      accountUsername: account?.username ?? null,
+      accountUsername: account?.handle ?? null,
+      account: account ?? null,
       counts,
     };
   });
@@ -306,14 +315,16 @@ export async function crmRoutes(app: FastifyInstance) {
       const safe = /^[=+\-@]/.test(s) ? `'${s}` : s; // evita injeção de fórmulas em planilhas
       return `"${safe.replace(/"/g, '""')}"`;
     };
-    const header = ["nome", "username", "instagram_id", "origem", "status", "primeira_interacao", "ultima_interacao", "ultima_palavra_chave", "tags", ...fields.map((f) => f.key)];
+    const header = ["nome", "canal", "username", "telefone", "id_no_canal", "origem", "status", "primeira_interacao", "ultima_interacao", "ultima_palavra_chave", "tags", ...fields.map((f) => f.key)];
     const lines = [header.map(esc).join(",")];
     for (const c of rows) {
       lines.push(
         [
           c.name,
+          c.channel,
           c.username,
-          c.igsid,
+          c.phone,
+          c.externalId,
           c.source,
           c.status,
           c.firstInteractionAt,

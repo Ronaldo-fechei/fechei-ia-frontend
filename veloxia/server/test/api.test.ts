@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { db } from "../src/db/client";
-import { automationExecutions, instagramAccounts, oauthStates } from "../src/db/schema";
+import { automationExecutions, channelAccounts, oauthStates } from "../src/db/schema";
 import { api, connectTestAccount, dmPayload, drain, getApp, mockGraph, postWebhook, resetDb, signup, type Session } from "./helpers";
 
 let s: Session;
@@ -44,9 +44,9 @@ describe("conexão oficial com o Instagram (OAuth)", () => {
     expect(cb.statusCode).toBe(302);
     expect(cb.headers.location).toContain("instagram=connected");
 
-    const [account] = await db.select().from(instagramAccounts);
-    expect(account.username).toBe("lojateste");
-    expect(account.igUserId).toBe("17841499999999999");
+    const [account] = await db.select().from(channelAccounts);
+    expect(account.handle).toBe("lojateste");
+    expect(account.externalId).toBe("17841499999999999");
     expect(account.accessTokenEnc).not.toContain("LONG-TOKEN");
     expect(account.webhookSubscribedAt).not.toBeNull();
     const sub = graph.calls.find((c) => c.url.pathname.endsWith("/me/subscribed_apps"));
@@ -65,10 +65,10 @@ describe("conexão oficial com o Instagram (OAuth)", () => {
     const start2 = await api(s, "POST", "/api/instagram/connect", {});
     const state2 = new URL(start2.json().url).searchParams.get("state")!;
     await app.inject({ method: "GET", url: `/api/instagram/callback?code=XYZ&state=${state2}` });
-    expect(await db.select().from(instagramAccounts)).toHaveLength(1);
+    expect(await db.select().from(channelAccounts)).toHaveLength(1);
 
     // Desconectar
-    expect((await api(s, "POST", `/api/instagram/accounts/${account.id}/disconnect`)).statusCode).toBe(200);
+    expect((await api(s, "POST", `/api/channels/accounts/${account.id}/disconnect`)).statusCode).toBe(200);
     expect((await api(s, "GET", "/api/instagram/accounts")).json().accounts).toHaveLength(0);
   });
 
@@ -95,7 +95,7 @@ describe("caixa de entrada e atendimento humano", () => {
   it("assumir conversa pausa automações, envio manual e retomada", async () => {
     const account = await connectTestAccount(s.workspaceId);
     await api(s, "POST", "/api/automations", { name: "Link", mode: "quick", quick: { keywords: [{ text: "link" }], message: "Aqui está" }, publish: true, cooldownSeconds: 0 });
-    await postWebhook(dmPayload(account.igUserId, "C1", "oi, tudo bem?"));
+    await postWebhook(dmPayload(account.externalId, "C1", "oi, tudo bem?"));
     await drain();
     const convs = (await api(s, "GET", "/api/conversations")).json();
     expect(convs.conversations).toHaveLength(1);
@@ -106,7 +106,7 @@ describe("caixa de entrada e atendimento humano", () => {
     expect((await api(s, "POST", `/api/conversations/${convId}/messages`, { text: "Olá!" })).statusCode).toBe(400);
     expect((await api(s, "POST", `/api/conversations/${convId}/takeover`)).statusCode).toBe(200);
 
-    await postWebhook(dmPayload(account.igUserId, "C1", "me manda o link"));
+    await postWebhook(dmPayload(account.externalId, "C1", "me manda o link"));
     await drain();
     expect(graph.sends()).toHaveLength(0);
     const skipped = await db.select().from(automationExecutions).where(eq(automationExecutions.skipReason, "human_takeover"));
@@ -121,24 +121,24 @@ describe("caixa de entrada e atendimento humano", () => {
     expect(history[1].trigger.skipReason).toBe("human_takeover");
 
     await api(s, "POST", `/api/conversations/${convId}/resume`);
-    await postWebhook(dmPayload(account.igUserId, "C1", "link"));
+    await postWebhook(dmPayload(account.externalId, "C1", "link"));
     await drain();
     expect(graph.sends()).toHaveLength(2);
   });
 
   it("eco de mensagem enviada pelo app do Instagram aparece no histórico sem duplicar", async () => {
     const account = await connectTestAccount(s.workspaceId);
-    await postWebhook(dmPayload(account.igUserId, "C9", "olá"));
+    await postWebhook(dmPayload(account.externalId, "C9", "olá"));
     await postWebhook({
       object: "instagram",
-      entry: [{ id: account.igUserId, time: Date.now(), messaging: [{ sender: { id: account.igUserId }, recipient: { id: "C9" }, timestamp: Date.now(), message: { mid: "mid.echo.1", text: "Respondi pelo celular", is_echo: true } }] }],
+      entry: [{ id: account.externalId, time: Date.now(), messaging: [{ sender: { id: account.externalId }, recipient: { id: "C9" }, timestamp: Date.now(), message: { mid: "mid.echo.1", text: "Respondi pelo celular", is_echo: true } }] }],
     });
     await drain();
     const conv = (await api(s, "GET", "/api/conversations")).json().conversations[0];
     const msgs = (await api(s, "GET", `/api/conversations/${conv.id}/messages`)).json().messages;
     expect(msgs.map((m: any) => [m.direction, m.source])).toEqual([
       ["inbound", "contact"],
-      ["outbound", "instagram_app"],
+      ["outbound", "native_app"],
     ]);
   });
 });
@@ -148,10 +148,10 @@ describe("stories, simulador, palavras-chave, dashboard e analytics", () => {
     const account = await connectTestAccount(s.workspaceId);
     await api(s, "POST", "/api/automations", { name: "Story", mode: "quick", quick: { triggerEvent: "story_reply", keywords: [], message: "Valeu por responder o Story!" }, publish: true });
     await api(s, "POST", "/api/automations", { name: "Menção", mode: "quick", quick: { triggerEvent: "story_mention", keywords: [], message: "Obrigado pela menção!" }, publish: true });
-    await postWebhook(dmPayload(account.igUserId, "S1", "amei!", "mid.sr", { reply_to: { story: { id: "st1", url: "https://cdn/x" } } }));
-    await postWebhook(dmPayload(account.igUserId, "S2", "", "mid.sm", { text: undefined, attachments: [{ type: "story_mention", payload: { url: "https://cdn/y" } }] }));
+    await postWebhook(dmPayload(account.externalId, "S1", "amei!", "mid.sr", { reply_to: { story: { id: "st1", url: "https://cdn/x" } } }));
+    await postWebhook(dmPayload(account.externalId, "S2", "", "mid.sm", { text: undefined, attachments: [{ type: "story_mention", payload: { url: "https://cdn/y" } }] }));
     // Mensagem comum no Direct não aciona a automação de Story.
-    await postWebhook(dmPayload(account.igUserId, "S3", "oi"));
+    await postWebhook(dmPayload(account.externalId, "S3", "oi"));
     await drain();
     expect(graph.sends().map((c) => c.body.message.text).sort()).toEqual(["Obrigado pela menção!", "Valeu por responder o Story!"]);
   });
@@ -191,8 +191,8 @@ describe("stories, simulador, palavras-chave, dashboard e analytics", () => {
   it("dashboard e analytics com dados reais", async () => {
     const account = await connectTestAccount(s.workspaceId);
     await api(s, "POST", "/api/automations", { name: "Link", mode: "quick", quick: { keywords: [{ text: "link" }], message: "ok" }, publish: true });
-    await postWebhook(dmPayload(account.igUserId, "D1", "link"));
-    await postWebhook(dmPayload(account.igUserId, "D2", "oi"));
+    await postWebhook(dmPayload(account.externalId, "D1", "link"));
+    await postWebhook(dmPayload(account.externalId, "D2", "oi"));
     await drain();
     const d = (await api(s, "GET", "/api/dashboard")).json();
     expect(d.cards.messagesIn.value).toBe(2);
@@ -210,22 +210,22 @@ describe("stories, simulador, palavras-chave, dashboard e analytics", () => {
   });
 
   it("limite de automações ativas do plano gratuito", async () => {
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) {
       const r = await api(s, "POST", "/api/automations", { name: `A${i}`, mode: "quick", quick: { keywords: [{ text: `k${i}` }], message: "x" }, publish: true });
       expect(r.statusCode).toBe(201);
     }
     const r = await api(s, "POST", "/api/automations", { name: "A4", mode: "quick", quick: { keywords: [{ text: "k4" }], message: "x" }, publish: true });
     expect(r.statusCode).toBe(402);
-    expect(r.json().error.message).toContain("3 automações ativas");
+    expect(r.json().error.message).toContain("2 automações ativas");
     // Criar e publicar é tudo ou nada: nenhum rascunho fica para trás.
-    expect((await api(s, "GET", "/api/automations")).json().automations).toHaveLength(3);
+    expect((await api(s, "GET", "/api/automations")).json().automations).toHaveLength(2);
     // Sem publicar, o rascunho pode ser salvo normalmente.
     const draft = await api(s, "POST", "/api/automations", { name: "A4", mode: "quick", quick: { keywords: [{ text: "k4" }], message: "x" } });
     expect(draft.statusCode).toBe(201);
   });
 
   it("callback oficial de exclusão de dados da Meta", async () => {
-    const account = await connectTestAccount(s.workspaceId, { igScopedId: "777" });
+    const account = await connectTestAccount(s.workspaceId, { scopedId: "777" });
     const payload = Buffer.from(JSON.stringify({ user_id: "777", algorithm: "HMAC-SHA256" })).toString("base64url");
     const sig = createHmac("sha256", "test-app-secret").update(payload).digest("base64url");
     const app = await getApp();
@@ -237,7 +237,7 @@ describe("stories, simulador, palavras-chave, dashboard e analytics", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().confirmation_code).toBeTruthy();
-    expect(await db.select().from(instagramAccounts).where(eq(instagramAccounts.id, account.id))).toHaveLength(0);
+    expect(await db.select().from(channelAccounts).where(eq(channelAccounts.id, account.id))).toHaveLength(0);
     const bad = await app.inject({ method: "POST", url: "/api/meta/data-deletion", headers: { "content-type": "application/x-www-form-urlencoded" }, payload: `signed_request=abc.${payload}` });
     expect(bad.statusCode).toBe(400);
   });

@@ -31,7 +31,7 @@ const schema = z.object({
   DATABASE_POOL_MAX: z.coerce.number().int().default(10),
   /** Segredo para assinaturas internas (links rastreados, códigos). */
   APP_SECRET: z.string().default(""),
-  /** Chave AES-256 (32 bytes em base64) para criptografar tokens do Instagram. */
+  /** Chave AES-256 (32 bytes em base64) para criptografar tokens dos canais (Instagram, WhatsApp). */
   ENCRYPTION_KEY: z.string().default(""),
   TRUST_PROXY: bool(true),
   COOKIE_SECURE: z.string().optional(),
@@ -51,6 +51,26 @@ const schema = z.object({
   META_WEBHOOK_FIELDS: z.string().default("messages,messaging_postbacks,messaging_referral,messaging_seen,comments"),
   /** Só ative se seu app tiver o recurso Human Agent aprovado pela Meta (permite responder até 7 dias). */
   META_HUMAN_AGENT_ENABLED: bool(false),
+
+  // Meta / WhatsApp (Cloud API + cadastro incorporado "Embedded Signup")
+  /** ID e chave secreta do app da Meta (Configurações do app → Básico). */
+  META_APP_ID: z.string().default(""),
+  META_APP_SECRET: z.string().default(""),
+  /** ID da configuração do Login do Facebook para Empresas usada no cadastro incorporado do WhatsApp. */
+  WHATSAPP_CONFIG_ID: z.string().default(""),
+  META_GRAPH_FACEBOOK_URL: z.string().default("https://graph.facebook.com"),
+  /**
+   * Tabela de preços da Meta em reais por mensagem cobrada, por categoria (JSON).
+   * Usada só para ESTIMAR o consumo do cliente — quem cobra é a Meta, no cartão do cliente.
+   * Atualize quando a Meta publicar novos valores.
+   */
+  WHATSAPP_RATES_BRL: z.string().default('{"marketing":0.3217,"utility":0.035,"authentication":0.035,"service":0.035}'),
+
+  // Pagamentos (Mercado Pago)
+  MP_ACCESS_TOKEN: z.string().default(""),
+  /** Assinatura secreta dos webhooks (Suas integrações → Webhooks). */
+  MP_WEBHOOK_SECRET: z.string().default(""),
+  MP_API_URL: z.string().default("https://api.mercadopago.com"),
 
   // E-mail (SMTP)
   SMTP_HOST: z.string().default(""),
@@ -110,12 +130,27 @@ export const adminEmails = new Set(
 
 export const metaConfigured = () => !!(env.INSTAGRAM_APP_ID && env.INSTAGRAM_APP_SECRET);
 export const webhookConfigured = () => !!(env.META_WEBHOOK_VERIFY_TOKEN && env.INSTAGRAM_APP_SECRET);
+export const whatsappConfigured = () => !!(env.META_APP_ID && env.META_APP_SECRET && env.WHATSAPP_CONFIG_ID);
+export const whatsappWebhookConfigured = () => !!(env.META_WEBHOOK_VERIFY_TOKEN && env.META_APP_SECRET);
+export const paymentsConfigured = () => !!env.MP_ACCESS_TOKEN;
+
+/** Preços da Meta por mensagem (R$) para estimar o consumo do WhatsApp. */
+export function whatsappRates(): Record<string, number> {
+  try {
+    const parsed = JSON.parse(env.WHATSAPP_RATES_BRL) as Record<string, unknown>;
+    return Object.fromEntries(Object.entries(parsed).filter(([, v]) => typeof v === "number")) as Record<string, number>;
+  } catch {
+    return {};
+  }
+}
 export const emailConfigured = () => !!(env.SMTP_HOST && env.SMTP_FROM);
 export const aiConfigured = () => !!env.ANTHROPIC_API_KEY;
 
 export const urls = {
   oauthCallback: () => `${env.APP_URL}/api/instagram/callback`,
   webhook: () => `${env.APP_URL}/api/webhooks/instagram`,
+  whatsappWebhook: () => `${env.APP_URL}/api/webhooks/whatsapp`,
+  mercadoPagoWebhook: () => `${env.APP_URL}/api/webhooks/mercadopago`,
   deauthorize: () => `${env.APP_URL}/api/meta/deauthorize`,
   dataDeletion: () => `${env.APP_URL}/api/meta/data-deletion`,
   app: (path = "") => `${env.APP_URL}${path}`,

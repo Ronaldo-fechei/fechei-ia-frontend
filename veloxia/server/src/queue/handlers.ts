@@ -5,7 +5,8 @@ import { automationExecutions, oauthStates, passwordResetTokens, sessions, webho
 import { expireWaitingExecutions } from "../engine/processor";
 import { fetchContactProfile, runExecutionJob } from "../engine/executor";
 import { processWebhookEvent } from "../engine/processor";
-import { refreshAccountToken, scanTokens, subscribeAccountWebhooks } from "../modules/instagram/service";
+import { refreshAccountToken, scanTokens, subscribeAccountWebhooks } from "../channels/accounts";
+import { syncTemplates } from "../modules/whatsapp/service";
 import { logger } from "../lib/logger";
 import { notify } from "../services/notifications";
 import { eq, lt } from "drizzle-orm";
@@ -16,10 +17,13 @@ export const jobHandlers: JobHandlers = {
   "webhook.process": async (p: { eventId: string }) => processWebhookEvent(p.eventId),
   "execution.run": async (p) => runExecutionJob(p),
   "contact.fetch_profile": async (p: { contactId: string }) => fetchContactProfile(p.contactId),
-  "instagram.subscribe_webhooks": async (p: { accountId: string }) => {
+  "channel.subscribe_webhooks": async (p: { accountId: string }) => {
     await subscribeAccountWebhooks(p.accountId);
   },
-  "instagram.refresh_token": async (p: { accountId: string }) => refreshAccountToken(p.accountId),
+  "channel.refresh_token": async (p: { accountId: string }) => refreshAccountToken(p.accountId),
+  "whatsapp.sync_templates": async (p: { accountId: string }) => {
+    await syncTemplates(p.accountId);
+  },
   "maintenance.tick": async () => maintenanceTick(),
 };
 

@@ -2,15 +2,17 @@
 import { and, desc, eq, ilike, lt, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { LIMITS } from "@veloxia/shared";
+import { CHANNEL_INFO, CHANNELS, LIMITS, type Channel } from "@veloxia/shared";
 import { env } from "../../config/env";
 import { db } from "../../db/client";
-import { automationExecutions, automations, contacts, contactTags, conversations, instagramAccounts, messages, tags, users } from "../../db/schema";
+import { automationExecutions, automations, channelAccounts, contacts, contactTags, conversations, messages, tags, users, whatsappTemplates } from "../../db/schema";
 import { AppError, badRequest, notFound } from "../../lib/errors";
 import { pagination, parse, uuidParam } from "../../lib/validation";
 import { requireAuth } from "../../plugins/auth";
-import { GraphApiError } from "../../integrations/instagram/client";
-import { clientFor, handleAccountGraphError } from "../instagram/service";
+import { accountLabel, handleAccountError, publicAccount } from "../../channels/accounts";
+import { instagramClient } from "../../channels/instagram";
+import { getDriver } from "../../channels/registry";
+import { contentPreview, type OutboundContent } from "../../engine/channel";
 import { track } from "../../services/analytics";
 import { audit } from "../../services/audit";
 import { publishEvent } from "../../services/events";
@@ -27,14 +29,25 @@ async function conversationOrThrow(workspaceId: string, id: string) {
   return row;
 }
 
-function windowInfo(lastInboundAt: Date | null) {
+/**
+ * Janela de atendimento: 24h após a última mensagem do contato.
+ * Instagram: com o recurso Human Agent aprovado, até 7 dias.
+ * WhatsApp: fora da janela só modelos aprovados (templateRequired).
+ */
+function windowInfo(channel: Channel, lastInboundAt: Date | null) {
   const now = Date.now();
   const last = lastInboundAt?.getTime() ?? 0;
-  const standardEnds = last ? last + LIMITS.messagingWindowHours * 3600_000 : 0;
+  const standardEnds = last ? last + CHANNEL_INFO[channel].messagingWindowHours * 3600_000 : 0;
   const humanAgentEnds = last ? last + 7 * 86400_000 : 0;
   const open = standardEnds > now;
-  const humanAgent = !open && env.META_HUMAN_AGENT_ENABLED && humanAgentEnds > now;
-  return { open, humanAgent, canReply: open || humanAgent, closesAt: open ? new Date(standardEnds) : humanAgent ? new Date(humanAgentEnds) : null };
+  const humanAgent = channel === "instagram" && !open && env.META_HUMAN_AGENT_ENABLED && humanAgentEnds > now;
+  return {
+    open,
+    humanAgent,
+    canReply: open || humanAgent,
+    templateRequired: !open && CHANNEL_INFO[channel].supportsTemplatesOutsideWindow,
+    closesAt: open ? new Date(standardEnds) : humanAgent ? new Date(humanAgentEnds) : null,
+  };
 }
 
 export async function inboxRoutes(app: FastifyInstance) {
@@ -45,17 +58,21 @@ export async function inboxRoutes(app: FastifyInstance) {
         filter: z.enum(["all", "unread", "human", "automation", "closed"]).default("all"),
         q: z.string().max(80).optional(),
         tagId: z.string().uuid().optional(),
+        channel: z.enum(CHANNELS).optional(),
       }),
       req.query,
     );
     const where: SQL[] = [eq(conversations.workspaceId, auth.workspace.id), sql`${conversations.lastMessageAt} is not null`];
+    if (q.channel) where.push(eq(conversations.channel, q.channel));
     if (q.filter === "unread") where.push(sql`${conversations.unreadCount} > 0`);
     if (q.filter === "human") where.push(eq(conversations.mode, "human"));
     if (q.filter === "automation") where.push(eq(conversations.mode, "automation"));
     if (q.filter === "closed") where.push(eq(conversations.status, "closed"));
     if (q.q) {
       const term = `%${q.q.replace(/[%_@]/g, "")}%`;
-      where.push(or(ilike(contacts.username, term), ilike(contacts.name, term), ilike(conversations.lastMessagePreview, term)) as SQL);
+      where.push(
+        or(ilike(contacts.username, term), ilike(contacts.name, term), ilike(contacts.phone, term), ilike(conversations.lastMessagePreview, term)) as SQL,
+      );
     }
     if (q.tagId) where.push(sql`exists (select 1 from contact_tags ct where ct.contact_id = ${contacts.id} and ct.tag_id = ${q.tagId})`);
     const rows = await db
@@ -64,12 +81,14 @@ export async function inboxRoutes(app: FastifyInstance) {
         status: conversations.status,
         mode: conversations.mode,
         unreadCount: conversations.unreadCount,
+        channel: conversations.channel,
         lastMessageAt: conversations.lastMessageAt,
         lastMessagePreview: conversations.lastMessagePreview,
         lastMessageDirection: conversations.lastMessageDirection,
         contactId: contacts.id,
         contactName: contacts.name,
         contactUsername: contacts.username,
+        contactPhone: contacts.phone,
         contactPic: contacts.profilePicUrl,
         lastKeyword: contacts.lastKeyword,
         lastAutomationName: automations.name,
@@ -104,12 +123,12 @@ export async function inboxRoutes(app: FastifyInstance) {
     const [humanBy] = conversation.humanByUserId
       ? await db.select({ name: users.name }).from(users).where(eq(users.id, conversation.humanByUserId)).limit(1)
       : [];
-    const [account] = await db.select({ username: instagramAccounts.username, status: instagramAccounts.status }).from(instagramAccounts).where(eq(instagramAccounts.id, conversation.instagramAccountId)).limit(1);
+    const [account] = await db.select().from(channelAccounts).where(eq(channelAccounts.id, conversation.channelAccountId)).limit(1);
     return {
       conversation: { ...conversation, humanByName: humanBy?.name ?? null },
       contact: { ...contact, tags: contactTagRows },
-      window: windowInfo(contact.lastInboundAt),
-      account: account ?? null,
+      window: windowInfo(conversation.channel, contact.lastInboundAt),
+      account: account ? publicAccount(account) : null,
     };
   });
 
@@ -200,20 +219,52 @@ export async function inboxRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  /** Envio manual por um atendente (exige atendimento humano ativo). */
+  /** Envio manual por um atendente (exige atendimento humano ativo). Texto ou, no WhatsApp, um modelo aprovado. */
   app.post("/conversations/:id/messages", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req, reply) => {
     const auth = requireAuth(req);
     const { id } = parse(uuidParam, req.params);
-    const { text } = parse(z.object({ text: z.string().trim().min(1, "Escreva uma mensagem").max(LIMITS.textMaxLength, `Máximo de ${LIMITS.textMaxLength} caracteres`) }), req.body);
+    const input = parse(
+      z
+        .object({
+          text: z.string().trim().max(LIMITS.textMaxLength, `Máximo de ${LIMITS.textMaxLength} caracteres`).optional(),
+          template: z.object({ templateId: z.string().uuid(), params: z.array(z.string().max(500)).max(LIMITS.maxTemplateParams).default([]) }).optional(),
+        })
+        .refine((v) => !!v.text || !!v.template, "Escreva uma mensagem"),
+      req.body,
+    );
     const { conversation, contact } = await conversationOrThrow(auth.workspace.id, id);
     if (conversation.mode !== "human") throw badRequest('Clique em "Assumir conversa" para responder manualmente.');
-    const window = windowInfo(contact.lastInboundAt);
-    if (!window.canReply) {
-      throw new AppError(409, "window_closed", "A janela de 24h para responder este contato terminou. Você poderá responder quando ele enviar uma nova mensagem.");
-    }
-    const [account] = await db.select().from(instagramAccounts).where(eq(instagramAccounts.id, conversation.instagramAccountId)).limit(1);
+    const [account] = await db.select().from(channelAccounts).where(eq(channelAccounts.id, conversation.channelAccountId)).limit(1);
     if (!account || account.disconnectedAt || account.status !== "connected") {
-      throw new AppError(409, "instagram_disconnected", "Não foi possível enviar esta mensagem. Verifique a conexão com o Instagram.");
+      throw new AppError(409, "channel_disconnected", "Não foi possível enviar esta mensagem. Verifique a conexão do canal em Canais.");
+    }
+    const window = windowInfo(account.channel, contact.lastInboundAt);
+
+    let content: OutboundContent;
+    if (input.template) {
+      if (account.channel !== "whatsapp") throw badRequest("Modelos de mensagem existem só no WhatsApp.");
+      const [tpl] = await db
+        .select()
+        .from(whatsappTemplates)
+        .where(and(eq(whatsappTemplates.id, input.template.templateId), eq(whatsappTemplates.channelAccountId, account.id)))
+        .limit(1);
+      if (!tpl || tpl.status !== "APPROVED") throw badRequest("Escolha um modelo aprovado pela Meta para este número.");
+      const expected = (tpl.bodyText.match(/\{\{\d+\}\}/g) ?? []).length;
+      if (input.template.params.filter((p) => p.trim()).length < expected) throw badRequest("Preencha todas as variáveis do modelo.");
+      let previewText = tpl.bodyText;
+      input.template.params.forEach((value, i) => (previewText = previewText.split(`{{${i + 1}}}`).join(value)));
+      content = { kind: "template", name: tpl.name, language: tpl.language, previewText, bodyParams: input.template.params.slice(0, expected) };
+    } else {
+      if (!window.canReply) {
+        throw new AppError(
+          409,
+          "window_closed",
+          window.templateRequired
+            ? "A janela de 24h terminou. No WhatsApp, envie um modelo aprovado para retomar a conversa."
+            : "A janela de 24h para responder este contato terminou. Você poderá responder quando ele enviar uma nova mensagem.",
+        );
+      }
+      content = { kind: "text", text: input.text! };
     }
 
     const [row] = await db
@@ -222,35 +273,45 @@ export async function inboxRoutes(app: FastifyInstance) {
         workspaceId: auth.workspace.id,
         conversationId: id,
         contactId: contact.id,
-        instagramAccountId: account.id,
+        channelAccountId: account.id,
         direction: "outbound",
         source: "agent",
-        type: "text",
-        text,
+        type: content.kind,
+        text: contentPreview(content),
+        payload: content.kind === "template" ? { content } : null,
         status: "sending",
         sentByUserId: auth.user.id,
       })
       .returning();
+    const driver = getDriver(account.channel);
     try {
-      const result = await clientFor(account).sendMessage({ id: contact.igsid }, { text }, { humanAgent: window.humanAgent });
-      if (result.message_id) {
+      let externalId: string | undefined;
+      if (account.channel === "instagram" && window.humanAgent && content.kind === "text") {
+        // Instagram fora das 24h: só com o recurso Human Agent aprovado pela Meta.
+        const result = await instagramClient(account).sendMessage({ id: contact.externalId }, { text: content.text }, { humanAgent: true });
+        externalId = result.message_id;
+      } else {
+        externalId = (await driver.adapter(account).send({ contactExternalId: contact.externalId }, content)).externalMessageId;
+      }
+      if (externalId) {
         await db
           .delete(messages)
-          .where(and(eq(messages.instagramAccountId, account.id), eq(messages.externalId, result.message_id), eq(messages.source, "instagram_app")));
+          .where(and(eq(messages.channelAccountId, account.id), eq(messages.externalId, externalId), eq(messages.source, "native_app")));
       }
       const sentAt = new Date();
-      await db.update(messages).set({ status: "sent", externalId: result.message_id ?? null, sentAt }).where(eq(messages.id, row.id));
+      await db.update(messages).set({ status: "sent", externalId: externalId ?? null, sentAt }).where(eq(messages.id, row.id));
       await db
         .update(conversations)
-        .set({ lastMessageAt: sentAt, lastMessagePreview: text.slice(0, 200), lastMessageDirection: "outbound", unreadCount: 0, updatedAt: sentAt })
+        .set({ lastMessageAt: sentAt, lastMessagePreview: contentPreview(content).slice(0, 200), lastMessageDirection: "outbound", unreadCount: 0, updatedAt: sentAt })
         .where(eq(conversations.id, id));
       await track(auth.workspace.id, "messages_out_agent");
       await publishEvent({ workspaceId: auth.workspace.id, type: "message.created", ids: { conversationId: id } });
       return reply.code(201).send({ message: { ...row, status: "sent", sentAt } });
     } catch (err) {
-      const userMessage = err instanceof GraphApiError ? err.userMessage : "Não foi possível enviar esta mensagem. Verifique a conexão com o Instagram.";
-      await db.update(messages).set({ status: "failed", errorMessage: userMessage, errorCode: err instanceof GraphApiError ? err.errorCode : "unknown" }).where(eq(messages.id, row.id));
-      if (err instanceof GraphApiError) await handleAccountGraphError(account, err);
+      const channelErr = driver.toChannelError(err);
+      const userMessage = channelErr.code === "unknown" ? `Não foi possível enviar esta mensagem. Verifique a conexão do ${accountLabel(account)}.` : channelErr.userMessage;
+      await db.update(messages).set({ status: "failed", errorMessage: userMessage, errorCode: channelErr.code }).where(eq(messages.id, row.id));
+      await handleAccountError(account, channelErr);
       await publishEvent({ workspaceId: auth.workspace.id, type: "message.updated", ids: { conversationId: id } });
       throw badRequest(userMessage);
     }

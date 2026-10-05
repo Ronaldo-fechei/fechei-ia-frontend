@@ -95,28 +95,74 @@ export const CONTACT_SOURCES: Record<string, string> = {
   story_mention: "Menção em Story",
   postback: "Botão",
   referral: "Link de indicação",
+  whatsapp: "WhatsApp",
 };
 
-/** Métricas de uso controladas pelos planos (limites ficam no banco de dados). */
+/** Limites controlados pelos planos (valores ficam no banco de dados; null = ilimitado). */
 export const PLAN_LIMIT_KEYS = [
   "instagram_accounts",
+  "whatsapp_accounts",
+  /** Quantos tipos de canal diferentes podem estar conectados (ex.: 1 = Instagram OU WhatsApp). */
+  "channel_types",
   "active_automations",
-  "contacts",
-  "messages_per_month",
+  /** Contatos que conversaram com você no mês (inclui quem já existia). */
+  "active_contacts_per_month",
   "ai_generations_per_month",
+  /** Blocos por fluxo no construtor visual. */
+  "flow_max_nodes",
 ] as const;
 export type PlanLimitKey = (typeof PLAN_LIMIT_KEYS)[number];
 
-export const PLAN_FEATURE_KEYS = ["flow_builder", "advanced_analytics", "ai", "comment_automations", "remove_branding"] as const;
+export const PLAN_LIMIT_LABELS: Record<PlanLimitKey, string> = {
+  instagram_accounts: "Contas do Instagram",
+  whatsapp_accounts: "Números do WhatsApp",
+  channel_types: "Canais diferentes",
+  active_automations: "Automações ativas",
+  active_contacts_per_month: "Contatos ativos por mês",
+  ai_generations_per_month: "Gerações com IA por mês",
+  flow_max_nodes: "Blocos por fluxo",
+};
+
+export const PLAN_FEATURE_KEYS = [
+  "flow_builder",
+  "multi_channel_automation",
+  "sequences",
+  "whatsapp_handoff",
+  "comment_automations",
+  "advanced_analytics",
+  "ai",
+  "export",
+] as const;
 export type PlanFeatureKey = (typeof PLAN_FEATURE_KEYS)[number];
+
+export const PLAN_FEATURE_LABELS: Record<PlanFeatureKey, string> = {
+  flow_builder: "Construtor visual de fluxos",
+  multi_channel_automation: "Mesma automação no Instagram e no WhatsApp",
+  sequences: "Sequências (mensagens nos dias seguintes)",
+  whatsapp_handoff: "Instagram → WhatsApp",
+  comment_automations: "Comentário → Direct",
+  advanced_analytics: "Analytics completo",
+  ai: "IA para criar e revisar mensagens",
+  export: "Exportação de contatos",
+};
 
 export interface PlanLimits {
   limits: Partial<Record<PlanLimitKey, number | null>>;
   features: Partial<Record<PlanFeatureKey, boolean>>;
 }
 
+export const BILLING_CYCLES = ["monthly", "annual"] as const;
+export type BillingCycle = (typeof BILLING_CYCLES)[number];
+
+/** Formata centavos em reais: 7990 → "R$ 79,90". */
+export function formatBRL(cents: number): string {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
+}
+
 export const NOTIFICATION_TYPES = [
   "instagram_disconnected",
+  "channel_disconnected",
+  "billing",
   "token_expired",
   "webhook_error",
   "send_failed",

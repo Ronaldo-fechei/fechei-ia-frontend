@@ -11,14 +11,15 @@ export interface VariableDefinition {
 }
 
 export const SYSTEM_VARIABLES: VariableDefinition[] = [
-  { key: "nome", label: "Nome", description: "Nome do contato (capturado ou do perfil do Instagram).", example: "Maria Souza" },
+  { key: "nome", label: "Nome", description: "Nome do contato (capturado ou do perfil no Instagram/WhatsApp).", example: "Maria Souza" },
   { key: "primeiro_nome", label: "Primeiro nome", description: "Primeiro nome do contato.", example: "Maria" },
-  { key: "username", label: "@username", description: "Usuário do Instagram do contato, com @.", example: "@maria.souza" },
-  { key: "nome_instagram", label: "Nome no Instagram", description: "Nome exibido no perfil do Instagram do contato.", example: "Maria Souza" },
+  { key: "username", label: "@username", description: "Usuário do Instagram do contato, com @ (vazio no WhatsApp).", example: "@maria.souza" },
+  { key: "nome_instagram", label: "Nome no perfil", description: "Nome exibido no perfil do Instagram ou do WhatsApp do contato.", example: "Maria Souza" },
+  { key: "telefone", label: "Telefone", description: "Número de WhatsApp do contato (vazio no Instagram).", example: "+55 11 98888-7777" },
   { key: "data", label: "Data", description: "Data atual (fuso do seu espaço de trabalho).", example: "03/10/2026" },
   { key: "hora", label: "Hora", description: "Hora atual (fuso do seu espaço de trabalho).", example: "08:21" },
   { key: "link", label: "Link principal", description: "Link principal configurado na automação.", example: "https://exemplo.com/produto" },
-  { key: "conta", label: "Sua conta", description: "O @ da sua conta do Instagram conectada.", example: "@sualoja" },
+  { key: "conta", label: "Sua conta", description: "O @ do seu Instagram ou o nome do seu WhatsApp que está respondendo.", example: "@sualoja" },
 ];
 
 const VARIABLE_PATTERN = /\{\{\s*([a-zA-Z0-9_]+)\s*(?:\|([^}]*))?\}\}/g;

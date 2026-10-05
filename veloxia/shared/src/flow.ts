@@ -6,10 +6,11 @@
  * os demais blocos são executados em sequência seguindo as conexões.
  */
 import { z } from "zod";
+import { CHANNELS, CHANNEL_INFO, type Channel } from "./channels";
 import { MATCH_TYPES, type KeywordRule } from "./keywords";
 
 /* ------------------------------------------------------------------------ */
-/* Limites da plataforma (Instagram Messaging API)                           */
+/* Limites das plataformas (APIs oficiais da Meta)                           */
 /* ------------------------------------------------------------------------ */
 
 export const LIMITS = {
@@ -18,7 +19,12 @@ export const LIMITS = {
   maxTemplateButtons: 3,
   maxQuickReplies: 10,
   maxKeywordsPerNode: 50,
+  /** Espera máxima dentro da janela de 24h. */
   maxDelaySeconds: 23 * 3600,
+  /** Sequências (WhatsApp, com modelos aprovados): até 30 dias. */
+  maxSequenceDelaySeconds: 30 * 86400,
+  /** Variáveis no corpo de um modelo do WhatsApp. */
+  maxTemplateParams: 10,
   maxStepsPerExecution: 60,
   maxNodes: 80,
   /** Janela padrão de mensagens após a última mensagem do contato. */
@@ -36,31 +42,35 @@ export type TriggerEvent = (typeof TRIGGER_EVENTS)[number];
 
 export const TRIGGER_EVENT_INFO: Record<
   TriggerEvent,
-  { label: string; description: string; available: boolean; unavailableReason?: string; permission: string }
+  { label: string; description: string; available: boolean; unavailableReason?: string; permission: string; channels: Channel[] }
 > = {
   dm: {
-    label: "Mensagem no Direct",
-    description: "Quando alguém envia uma mensagem no Direct contendo uma palavra-chave.",
+    label: "Mensagem direta",
+    description: "Quando alguém envia uma mensagem no Direct do Instagram ou no WhatsApp contendo uma palavra-chave.",
     available: true,
     permission: "instagram_business_manage_messages",
+    channels: ["instagram", "whatsapp"],
   },
   comment: {
     label: "Comentário → Direct",
     description: "Quando alguém comenta em uma publicação ou Reel. A primeira mensagem é enviada como resposta privada.",
     available: true,
     permission: "instagram_business_manage_comments",
+    channels: ["instagram"],
   },
   story_reply: {
     label: "Resposta ao Story",
     description: "Quando alguém responde a um dos seus Stories pelo Direct.",
     available: true,
     permission: "instagram_business_manage_messages",
+    channels: ["instagram"],
   },
   story_mention: {
     label: "Menção em Story",
     description: "Quando alguém menciona sua conta em um Story (a menção chega no Direct).",
     available: true,
     permission: "instagram_business_manage_messages",
+    channels: ["instagram"],
   },
   new_follower: {
     label: "Novo seguidor",
@@ -69,6 +79,7 @@ export const TRIGGER_EVENT_INFO: Record<
     unavailableReason:
       "A API oficial do Instagram não envia eventos de novos seguidores. Este gatilho será liberado somente se a Meta disponibilizar o evento oficialmente.",
     permission: "—",
+    channels: ["instagram"],
   },
 };
 
@@ -89,12 +100,16 @@ export const NODE_TYPES = [
   "add_tag",
   "remove_tag",
   "capture",
+  "whatsapp_template",
+  "whatsapp_handoff",
   "handoff",
   "end",
 ] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
 
-export const NODE_INFO: Record<NodeType, { label: string; description: string; group: "inicio" | "mensagens" | "logica" | "contato" | "fim" }> = {
+export type NodeGroup = "inicio" | "mensagens" | "canais" | "logica" | "contato" | "fim";
+
+export const NODE_INFO: Record<NodeType, { label: string; description: string; group: NodeGroup }> = {
   trigger: { label: "Gatilho", description: "Onde a automação começa.", group: "inicio" },
   keyword: { label: "Palavra-chave", description: "Palavras ou frases que ativam este caminho.", group: "inicio" },
   message: { label: "Mensagem", description: "Envia um texto com emojis e variáveis.", group: "mensagens" },
@@ -107,12 +122,28 @@ export const NODE_INFO: Record<NodeType, { label: string; description: string; g
   add_tag: { label: "Adicionar tag", description: "Adiciona uma tag ao contato.", group: "contato" },
   remove_tag: { label: "Remover tag", description: "Remove uma tag do contato.", group: "contato" },
   capture: { label: "Capturar informação", description: "Pergunta e salva a resposta em um campo do contato.", group: "contato" },
+  whatsapp_template: {
+    label: "Modelo do WhatsApp",
+    description: "Envia um modelo aprovado pela Meta. É o único tipo de mensagem permitido após 24h sem resposta.",
+    group: "canais",
+  },
+  whatsapp_handoff: {
+    label: "Levar para o WhatsApp",
+    description: "Envia no Direct um botão que abre uma conversa com o seu WhatsApp.",
+    group: "canais",
+  },
   handoff: { label: "Atendimento humano", description: "Pausa as automações e encaminha para um atendente.", group: "fim" },
   end: { label: "Finalizar fluxo", description: "Encerra a automação.", group: "fim" },
 };
 
 /** Blocos que enviam mensagem ao contato. */
-export const SEND_NODE_TYPES: NodeType[] = ["message", "image", "video", "link", "buttons", "capture"];
+export const SEND_NODE_TYPES: NodeType[] = ["message", "image", "video", "link", "buttons", "capture", "whatsapp_template", "whatsapp_handoff"];
+
+/** Blocos que só funcionam em alguns canais (os demais funcionam em todos). */
+export const NODE_CHANNELS: Partial<Record<NodeType, Channel[]>> = {
+  whatsapp_template: ["whatsapp"],
+  whatsapp_handoff: ["instagram"],
+};
 
 const httpUrl = z
   .string()
@@ -129,6 +160,8 @@ export const keywordRuleSchema = z.object({
 
 export const triggerDataSchema = z.object({
   event: z.enum(TRIGGER_EVENTS).default("dm"),
+  /** Canais em que a automação responde (Mensagem direta pode usar vários). */
+  channels: z.array(z.enum(CHANNELS)).min(1).default(["instagram"]),
   /** Comentário → Direct: publicações monitoradas (vazio = todas). */
   mediaIds: z.array(z.string()).default([]),
   /** Comentário → Direct: respostas públicas ao comentário (uma é sorteada). */
@@ -199,6 +232,25 @@ export const nodeDataSchemas = {
     retryMessage: z.string().default("Não consegui entender. Pode enviar novamente?"),
     maxAttempts: z.number().int().min(1).max(5).default(2),
   }),
+  whatsapp_template: z.object({
+    templateName: z.string().default(""),
+    language: z.string().default("pt_BR"),
+    category: z.string().default(""),
+    /** Texto do modelo (cópia para pré-visualização e simulador). */
+    bodyText: z.string().default(""),
+    /** Valores de {{1}}, {{2}}… (aceitam variáveis como {{nome}}). */
+    bodyParams: z.array(z.string()).default([]),
+    /** Imagem do cabeçalho, quando o modelo tem cabeçalho de imagem. */
+    headerImageUrl: z.string().default(""),
+  }),
+  whatsapp_handoff: z.object({
+    text: z.string().default("Prefere continuar pelo WhatsApp? Toque no botão abaixo 👇"),
+    buttonTitle: z.string().default("Abrir WhatsApp"),
+    /** Mensagem que já aparece digitada para o contato no WhatsApp. */
+    prefill: z.string().default("Olá! Vim pelo Instagram 👋"),
+    /** Número conectado (vazio = primeiro número do WhatsApp conectado). */
+    accountId: z.string().default(""),
+  }),
   handoff: z.object({ message: z.string().default("") }),
   end: z.object({}).passthrough(),
 } satisfies Record<NodeType, z.ZodTypeAny>;
@@ -264,10 +316,10 @@ export function parseFlow(input: unknown): Flow {
   };
 }
 
-export function emptyFlow(event: TriggerEvent = "dm"): Flow {
+export function emptyFlow(event: TriggerEvent = "dm", channels?: Channel[]): Flow {
   return {
     version: 1,
-    nodes: [{ id: "trigger", type: "trigger", position: { x: 0, y: 0 }, data: triggerDataSchema.parse({ event }) }],
+    nodes: [{ id: "trigger", type: "trigger", position: { x: 0, y: 0 }, data: triggerDataSchema.parse({ event, channels }) }],
     edges: [],
   };
 }
@@ -310,6 +362,15 @@ export function getOutputHandles(node: FlowNode): OutputHandle[] {
     default:
       return [{ id: "out", label: "Próximo" }];
   }
+}
+
+/** Canais em que o fluxo responde. */
+export function flowChannels(flow: Flow): Channel[] {
+  const trigger = getTriggerNode(flow);
+  if (!trigger) return ["instagram"];
+  const allowed = TRIGGER_EVENT_INFO[trigger.data.event].channels;
+  const chosen = (trigger.data.channels ?? ["instagram"]).filter((c) => allowed.includes(c));
+  return chosen.length ? chosen : ["instagram"];
 }
 
 /** Indica se o bloco pausa a execução esperando uma resposta do contato. */
@@ -412,6 +473,24 @@ export function validateFlow(flow: Flow): FlowValidation {
   if (!eventInfo.available) errors.push({ nodeId: trigger.id, message: eventInfo.unavailableReason ?? "Gatilho indisponível." });
 
   if (new Set(flow.nodes.map((n) => n.id)).size !== flow.nodes.length) errors.push({ message: "Há blocos com identificadores duplicados." });
+
+  // Canais
+  const chosenChannels = trigger.data.channels ?? ["instagram"];
+  if (chosenChannels.length === 0) errors.push({ nodeId: trigger.id, message: "Escolha pelo menos um canal para a automação." });
+  for (const c of chosenChannels) {
+    if (!eventInfo.channels.includes(c))
+      errors.push({ nodeId: trigger.id, message: `"${eventInfo.label}" não existe no ${CHANNEL_INFO[c].label}. Remova este canal do gatilho.` });
+  }
+  const channels = flowChannels(flow);
+  for (const node of flow.nodes) {
+    const only = NODE_CHANNELS[node.type];
+    if (only && !only.some((c) => channels.includes(c))) {
+      errors.push({
+        nodeId: node.id,
+        message: `O bloco "${NODE_INFO[node.type].label}" só funciona no ${only.map((c) => CHANNEL_INFO[c].label).join(" e ")}. Inclua esse canal no gatilho ou remova o bloco.`,
+      });
+    }
+  }
 
   // Conexões
   const usedHandles = new Set<string>();
@@ -525,8 +604,31 @@ export function validateFlow(flow: Flow): FlowValidation {
       }
       case "delay": {
         const d = node.data as NodeDataMap["delay"];
-        if (!Number.isInteger(d.seconds) || d.seconds < 1 || d.seconds > LIMITS.maxDelaySeconds)
-          errors.push({ nodeId: node.id, message: "O tempo de espera deve ficar entre 1 segundo e 23 horas." });
+        const max = channels.includes("whatsapp") ? LIMITS.maxSequenceDelaySeconds : LIMITS.maxDelaySeconds;
+        if (!Number.isInteger(d.seconds) || d.seconds < 1 || d.seconds > max)
+          errors.push({
+            nodeId: node.id,
+            message: channels.includes("whatsapp")
+              ? "O tempo de espera deve ficar entre 1 segundo e 30 dias."
+              : "No Instagram, o tempo de espera deve ficar entre 1 segundo e 23 horas (regra da janela de 24h).",
+          });
+        break;
+      }
+      case "whatsapp_template": {
+        const d = node.data as NodeDataMap["whatsapp_template"];
+        if (!d.templateName) errors.push({ nodeId: node.id, message: "Escolha um modelo aprovado do WhatsApp." });
+        if (d.bodyParams.length > LIMITS.maxTemplateParams) errors.push({ nodeId: node.id, message: "Muitas variáveis no modelo." });
+        const expected = (d.bodyText.match(/\{\{\d+\}\}/g) ?? []).length;
+        if (expected > 0 && d.bodyParams.filter((p) => p.trim()).length < expected)
+          errors.push({ nodeId: node.id, message: "Preencha todas as variáveis do modelo do WhatsApp." });
+        break;
+      }
+      case "whatsapp_handoff": {
+        const d = node.data as NodeDataMap["whatsapp_handoff"];
+        textIssue(d.text);
+        if (!d.buttonTitle?.trim() || d.buttonTitle.length > LIMITS.buttonTitleMaxLength)
+          errors.push({ nodeId: node.id, message: "O texto do botão deve ter de 1 a 20 caracteres." });
+        if (d.prefill.length > 500) errors.push({ nodeId: node.id, message: "A mensagem pré-preenchida passa de 500 caracteres." });
         break;
       }
       case "add_tag":
@@ -605,6 +707,35 @@ export function validateFlow(flow: Flow): FlowValidation {
       }
     };
     walk(trigger.id, 0, false);
+  }
+
+  // Sequências: depois de uma espera longa a janela de 24h pode ter fechado.
+  if (!cycleAt) {
+    const flagged = new Set<string>();
+    const walk = (id: string, windowMayBeClosed: boolean) => {
+      const node = byId.get(id);
+      if (!node) return;
+      let closed = windowMayBeClosed;
+      if (node.type === "delay" && (node.data as NodeDataMap["delay"]).seconds > LIMITS.maxDelaySeconds) closed = true;
+      const sends = SEND_NODE_TYPES.includes(node.type) || (node.type === "handoff" && !!(node.data as NodeDataMap["handoff"]).message);
+      if (closed && sends && node.type !== "whatsapp_template" && !flagged.has(node.id)) {
+        flagged.add(node.id);
+        errors.push({
+          nodeId: node.id,
+          message:
+            "Depois de esperar mais de 23 horas, a janela de 24h da Meta pode ter fechado: use um bloco \"Modelo do WhatsApp\" (modelo aprovado) para retomar a conversa.",
+        });
+      }
+      for (const e of flow.edges.filter((x) => x.source === id)) {
+        // Uma resposta do contato reabre a janela.
+        const reopens = waitsForInput(node) && (e.sourceHandle.startsWith("btn:") || node.type === "capture");
+        walk(e.target, closed && !reopens);
+      }
+    };
+    walk(trigger.id, false);
+    if (flagged.size === 0 && channels.length > 1 && flow.nodes.some((n) => n.type === "delay" && (n.data as NodeDataMap["delay"]).seconds > LIMITS.maxDelaySeconds)) {
+      warnings.push({ message: "No Instagram, mensagens após 24h sem resposta não são entregues; a sequência continua só no WhatsApp." });
+    }
   }
 
   return { valid: errors.length === 0, errors, warnings };

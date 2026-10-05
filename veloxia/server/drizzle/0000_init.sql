@@ -37,7 +37,8 @@ CREATE TABLE "automation_executions" (
 	"workspace_id" uuid NOT NULL,
 	"automation_id" uuid,
 	"automation_name" text NOT NULL,
-	"instagram_account_id" uuid,
+	"channel_account_id" uuid,
+	"channel" text DEFAULT 'instagram' NOT NULL,
 	"contact_id" uuid,
 	"conversation_id" uuid,
 	"trigger_event" text NOT NULL,
@@ -79,7 +80,8 @@ CREATE TABLE "automation_triggers" (
 CREATE TABLE "automations" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"workspace_id" uuid NOT NULL,
-	"instagram_account_id" uuid,
+	"channel_account_id" uuid,
+	"channels" text[] DEFAULT '{instagram}'::text[] NOT NULL,
 	"name" text NOT NULL,
 	"description" text DEFAULT '' NOT NULL,
 	"kind" text DEFAULT 'standard' NOT NULL,
@@ -103,10 +105,60 @@ CREATE TABLE "automations" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "billing_payments" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"workspace_id" uuid NOT NULL,
+	"provider" text NOT NULL,
+	"reference" text NOT NULL,
+	"kind" text NOT NULL,
+	"plan_id" text NOT NULL,
+	"billing_cycle" text NOT NULL,
+	"amount_cents" integer NOT NULL,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"provider_id" text,
+	"provider_payment_ids" text[] DEFAULT '{}'::text[] NOT NULL,
+	"checkout_url" text,
+	"paid_at" timestamp with time zone,
+	"created_by_user_id" uuid,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "billing_payments_reference_unique" UNIQUE("reference")
+);
+--> statement-breakpoint
+CREATE TABLE "channel_accounts" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"workspace_id" uuid NOT NULL,
+	"channel" text NOT NULL,
+	"external_id" text NOT NULL,
+	"scoped_id" text,
+	"handle" text NOT NULL,
+	"name" text,
+	"profile_picture_url" text,
+	"account_type" text,
+	"followers_count" integer,
+	"media_count" integer,
+	"metadata" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"access_token_enc" text,
+	"token_expires_at" timestamp with time zone,
+	"token_refreshed_at" timestamp with time zone,
+	"scopes" text[] DEFAULT '{}'::text[] NOT NULL,
+	"status" text DEFAULT 'connected' NOT NULL,
+	"webhook_subscribed_at" timestamp with time zone,
+	"webhook_error" text,
+	"last_error" text,
+	"last_error_at" timestamp with time zone,
+	"last_webhook_at" timestamp with time zone,
+	"connected_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"disconnected_at" timestamp with time zone,
+	"connected_by_user_id" uuid,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "comment_events" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"workspace_id" uuid NOT NULL,
-	"instagram_account_id" uuid NOT NULL,
+	"channel_account_id" uuid NOT NULL,
 	"comment_id" text NOT NULL,
 	"media_id" text,
 	"media_product_type" text,
@@ -139,9 +191,11 @@ CREATE TABLE "contact_tags" (
 CREATE TABLE "contacts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"workspace_id" uuid NOT NULL,
-	"instagram_account_id" uuid NOT NULL,
-	"igsid" text NOT NULL,
+	"channel_account_id" uuid NOT NULL,
+	"channel" text NOT NULL,
+	"external_id" text NOT NULL,
 	"username" text,
+	"phone" text,
 	"name" text,
 	"profile_pic_url" text,
 	"follower_count" integer,
@@ -162,7 +216,8 @@ CREATE TABLE "contacts" (
 CREATE TABLE "conversations" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"workspace_id" uuid NOT NULL,
-	"instagram_account_id" uuid NOT NULL,
+	"channel_account_id" uuid NOT NULL,
+	"channel" text NOT NULL,
 	"contact_id" uuid NOT NULL,
 	"status" text DEFAULT 'open' NOT NULL,
 	"mode" text DEFAULT 'automation' NOT NULL,
@@ -204,34 +259,6 @@ CREATE TABLE "data_deletion_requests" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"completed_at" timestamp with time zone,
 	CONSTRAINT "data_deletion_requests_confirmation_code_unique" UNIQUE("confirmation_code")
-);
---> statement-breakpoint
-CREATE TABLE "instagram_accounts" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"workspace_id" uuid NOT NULL,
-	"ig_user_id" text NOT NULL,
-	"ig_scoped_id" text,
-	"username" text NOT NULL,
-	"name" text,
-	"profile_picture_url" text,
-	"account_type" text,
-	"followers_count" integer,
-	"media_count" integer,
-	"access_token_enc" text,
-	"token_expires_at" timestamp with time zone,
-	"token_refreshed_at" timestamp with time zone,
-	"scopes" text[] DEFAULT '{}'::text[] NOT NULL,
-	"status" text DEFAULT 'connected' NOT NULL,
-	"webhook_subscribed_at" timestamp with time zone,
-	"webhook_error" text,
-	"last_error" text,
-	"last_error_at" timestamp with time zone,
-	"last_webhook_at" timestamp with time zone,
-	"connected_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"disconnected_at" timestamp with time zone,
-	"connected_by_user_id" uuid,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "jobs" (
@@ -293,7 +320,7 @@ CREATE TABLE "messages" (
 	"workspace_id" uuid NOT NULL,
 	"conversation_id" uuid NOT NULL,
 	"contact_id" uuid NOT NULL,
-	"instagram_account_id" uuid NOT NULL,
+	"channel_account_id" uuid NOT NULL,
 	"direction" text NOT NULL,
 	"source" text NOT NULL,
 	"type" text DEFAULT 'text' NOT NULL,
@@ -327,7 +354,7 @@ CREATE TABLE "oauth_states" (
 	"state_hash" text NOT NULL,
 	"workspace_id" uuid NOT NULL,
 	"user_id" uuid NOT NULL,
-	"return_to" text DEFAULT '/app/instagram' NOT NULL,
+	"return_to" text DEFAULT '/app/canais' NOT NULL,
 	"expires_at" timestamp with time zone NOT NULL,
 	"used_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -350,10 +377,15 @@ CREATE TABLE "plans" (
 	"name" text NOT NULL,
 	"description" text DEFAULT '' NOT NULL,
 	"price_cents" integer DEFAULT 0 NOT NULL,
+	"annual_price_cents" integer,
+	"promo_price_cents" integer,
+	"promo_months" integer DEFAULT 0 NOT NULL,
 	"currency" text DEFAULT 'BRL' NOT NULL,
 	"interval" text DEFAULT 'month' NOT NULL,
 	"limits" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"features" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"perks" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"highlighted" boolean DEFAULT false NOT NULL,
 	"is_public" boolean DEFAULT true NOT NULL,
 	"is_default" boolean DEFAULT false NOT NULL,
 	"sort_order" integer DEFAULT 0 NOT NULL,
@@ -387,6 +419,11 @@ CREATE TABLE "subscriptions" (
 	"provider" text,
 	"provider_customer_id" text,
 	"provider_subscription_id" text,
+	"provider_status" text,
+	"billing_cycle" text DEFAULT 'monthly' NOT NULL,
+	"amount_cents" integer,
+	"promo_ends_at" timestamp with time zone,
+	"last_payment_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "subscriptions_workspace_id_unique" UNIQUE("workspace_id")
@@ -446,6 +483,24 @@ CREATE TABLE "webhook_events" (
 	CONSTRAINT "webhook_events_body_sha256_unique" UNIQUE("body_sha256")
 );
 --> statement-breakpoint
+CREATE TABLE "whatsapp_templates" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"workspace_id" uuid NOT NULL,
+	"channel_account_id" uuid NOT NULL,
+	"waba_id" text NOT NULL,
+	"external_id" text,
+	"name" text NOT NULL,
+	"language" text NOT NULL,
+	"category" text NOT NULL,
+	"status" text NOT NULL,
+	"rejected_reason" text,
+	"components" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"body_text" text DEFAULT '' NOT NULL,
+	"synced_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "workspace_members" (
 	"workspace_id" uuid NOT NULL,
 	"user_id" uuid NOT NULL,
@@ -474,33 +529,36 @@ ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_workspace_id_workspaces_id_f
 ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "automation_executions" ADD CONSTRAINT "automation_executions_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "automation_executions" ADD CONSTRAINT "automation_executions_automation_id_automations_id_fk" FOREIGN KEY ("automation_id") REFERENCES "public"."automations"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "automation_executions" ADD CONSTRAINT "automation_executions_instagram_account_id_instagram_accounts_id_fk" FOREIGN KEY ("instagram_account_id") REFERENCES "public"."instagram_accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "automation_executions" ADD CONSTRAINT "automation_executions_channel_account_id_channel_accounts_id_fk" FOREIGN KEY ("channel_account_id") REFERENCES "public"."channel_accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "automation_executions" ADD CONSTRAINT "automation_executions_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "public"."contacts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "automation_executions" ADD CONSTRAINT "automation_executions_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."conversations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "automation_triggers" ADD CONSTRAINT "automation_triggers_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "automation_triggers" ADD CONSTRAINT "automation_triggers_automation_id_automations_id_fk" FOREIGN KEY ("automation_id") REFERENCES "public"."automations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "automations" ADD CONSTRAINT "automations_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "automations" ADD CONSTRAINT "automations_instagram_account_id_instagram_accounts_id_fk" FOREIGN KEY ("instagram_account_id") REFERENCES "public"."instagram_accounts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "automations" ADD CONSTRAINT "automations_channel_account_id_channel_accounts_id_fk" FOREIGN KEY ("channel_account_id") REFERENCES "public"."channel_accounts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "automations" ADD CONSTRAINT "automations_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "billing_payments" ADD CONSTRAINT "billing_payments_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "billing_payments" ADD CONSTRAINT "billing_payments_plan_id_plans_id_fk" FOREIGN KEY ("plan_id") REFERENCES "public"."plans"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "billing_payments" ADD CONSTRAINT "billing_payments_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "channel_accounts" ADD CONSTRAINT "channel_accounts_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "channel_accounts" ADD CONSTRAINT "channel_accounts_connected_by_user_id_users_id_fk" FOREIGN KEY ("connected_by_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comment_events" ADD CONSTRAINT "comment_events_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "comment_events" ADD CONSTRAINT "comment_events_instagram_account_id_instagram_accounts_id_fk" FOREIGN KEY ("instagram_account_id") REFERENCES "public"."instagram_accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comment_events" ADD CONSTRAINT "comment_events_channel_account_id_channel_accounts_id_fk" FOREIGN KEY ("channel_account_id") REFERENCES "public"."channel_accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comment_events" ADD CONSTRAINT "comment_events_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "public"."contacts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comment_events" ADD CONSTRAINT "comment_events_automation_id_automations_id_fk" FOREIGN KEY ("automation_id") REFERENCES "public"."automations"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "contact_tags" ADD CONSTRAINT "contact_tags_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "public"."contacts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "contact_tags" ADD CONSTRAINT "contact_tags_tag_id_tags_id_fk" FOREIGN KEY ("tag_id") REFERENCES "public"."tags"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "contact_tags" ADD CONSTRAINT "contact_tags_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "contacts" ADD CONSTRAINT "contacts_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "contacts" ADD CONSTRAINT "contacts_instagram_account_id_instagram_accounts_id_fk" FOREIGN KEY ("instagram_account_id") REFERENCES "public"."instagram_accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "contacts" ADD CONSTRAINT "contacts_channel_account_id_channel_accounts_id_fk" FOREIGN KEY ("channel_account_id") REFERENCES "public"."channel_accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "conversations" ADD CONSTRAINT "conversations_instagram_account_id_instagram_accounts_id_fk" FOREIGN KEY ("instagram_account_id") REFERENCES "public"."instagram_accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_channel_account_id_channel_accounts_id_fk" FOREIGN KEY ("channel_account_id") REFERENCES "public"."channel_accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "public"."contacts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_human_by_user_id_users_id_fk" FOREIGN KEY ("human_by_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "custom_field_values" ADD CONSTRAINT "custom_field_values_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "public"."contacts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "custom_field_values" ADD CONSTRAINT "custom_field_values_field_id_custom_fields_id_fk" FOREIGN KEY ("field_id") REFERENCES "public"."custom_fields"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "custom_field_values" ADD CONSTRAINT "custom_field_values_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "custom_fields" ADD CONSTRAINT "custom_fields_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "instagram_accounts" ADD CONSTRAINT "instagram_accounts_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "instagram_accounts" ADD CONSTRAINT "instagram_accounts_connected_by_user_id_users_id_fk" FOREIGN KEY ("connected_by_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "link_clicks" ADD CONSTRAINT "link_clicks_link_id_links_id_fk" FOREIGN KEY ("link_id") REFERENCES "public"."links"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "link_clicks" ADD CONSTRAINT "link_clicks_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "link_clicks" ADD CONSTRAINT "link_clicks_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "public"."contacts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -510,7 +568,7 @@ ALTER TABLE "media_files" ADD CONSTRAINT "media_files_workspace_id_workspaces_id
 ALTER TABLE "messages" ADD CONSTRAINT "messages_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "messages" ADD CONSTRAINT "messages_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."conversations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "messages" ADD CONSTRAINT "messages_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "public"."contacts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "messages" ADD CONSTRAINT "messages_instagram_account_id_instagram_accounts_id_fk" FOREIGN KEY ("instagram_account_id") REFERENCES "public"."instagram_accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "messages" ADD CONSTRAINT "messages_channel_account_id_channel_accounts_id_fk" FOREIGN KEY ("channel_account_id") REFERENCES "public"."channel_accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "messages" ADD CONSTRAINT "messages_sent_by_user_id_users_id_fk" FOREIGN KEY ("sent_by_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_states" ADD CONSTRAINT "oauth_states_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -522,6 +580,8 @@ ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_plan_id_plans_id_fk" F
 ALTER TABLE "system_errors" ADD CONSTRAINT "system_errors_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tags" ADD CONSTRAINT "tags_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "usage_counters" ADD CONSTRAINT "usage_counters_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "whatsapp_templates" ADD CONSTRAINT "whatsapp_templates_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "whatsapp_templates" ADD CONSTRAINT "whatsapp_templates_channel_account_id_channel_accounts_id_fk" FOREIGN KEY ("channel_account_id") REFERENCES "public"."channel_accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workspace_members" ADD CONSTRAINT "workspace_members_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workspace_members" ADD CONSTRAINT "workspace_members_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workspaces" ADD CONSTRAINT "workspaces_owner_id_users_id_fk" FOREIGN KEY ("owner_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -535,23 +595,26 @@ CREATE UNIQUE INDEX "executions_active_uq" ON "automation_executions" USING btre
 CREATE INDEX "automation_triggers_workspace_idx" ON "automation_triggers" USING btree ("workspace_id","normalized");--> statement-breakpoint
 CREATE INDEX "automation_triggers_automation_idx" ON "automation_triggers" USING btree ("automation_id");--> statement-breakpoint
 CREATE INDEX "automations_workspace_status_idx" ON "automations" USING btree ("workspace_id","status");--> statement-breakpoint
+CREATE INDEX "billing_payments_workspace_idx" ON "billing_payments" USING btree ("workspace_id","created_at");--> statement-breakpoint
+CREATE INDEX "billing_payments_provider_idx" ON "billing_payments" USING btree ("provider_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "channel_accounts_active_external_uq" ON "channel_accounts" USING btree ("channel","external_id") WHERE "channel_accounts"."disconnected_at" is null;--> statement-breakpoint
+CREATE INDEX "channel_accounts_workspace_idx" ON "channel_accounts" USING btree ("workspace_id");--> statement-breakpoint
+CREATE INDEX "channel_accounts_scoped_idx" ON "channel_accounts" USING btree ("scoped_id");--> statement-breakpoint
 CREATE INDEX "comment_events_workspace_idx" ON "comment_events" USING btree ("workspace_id","created_at");--> statement-breakpoint
 CREATE INDEX "comment_events_media_idx" ON "comment_events" USING btree ("media_id");--> statement-breakpoint
 CREATE INDEX "contact_tags_tag_idx" ON "contact_tags" USING btree ("tag_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "contacts_account_igsid_uq" ON "contacts" USING btree ("instagram_account_id","igsid");--> statement-breakpoint
+CREATE UNIQUE INDEX "contacts_account_external_uq" ON "contacts" USING btree ("channel_account_id","external_id");--> statement-breakpoint
 CREATE INDEX "contacts_workspace_last_idx" ON "contacts" USING btree ("workspace_id","last_interaction_at");--> statement-breakpoint
+CREATE INDEX "contacts_workspace_inbound_idx" ON "contacts" USING btree ("workspace_id","last_inbound_at");--> statement-breakpoint
 CREATE INDEX "conversations_workspace_last_idx" ON "conversations" USING btree ("workspace_id","last_message_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "custom_fields_workspace_key_uq" ON "custom_fields" USING btree ("workspace_id","key");--> statement-breakpoint
-CREATE UNIQUE INDEX "instagram_accounts_active_ig_user_uq" ON "instagram_accounts" USING btree ("ig_user_id") WHERE "instagram_accounts"."disconnected_at" is null;--> statement-breakpoint
-CREATE INDEX "instagram_accounts_workspace_idx" ON "instagram_accounts" USING btree ("workspace_id");--> statement-breakpoint
-CREATE INDEX "instagram_accounts_scoped_idx" ON "instagram_accounts" USING btree ("ig_scoped_id");--> statement-breakpoint
 CREATE INDEX "jobs_pending_idx" ON "jobs" USING btree ("status","run_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "jobs_dedupe_uq" ON "jobs" USING btree ("dedupe_key") WHERE "jobs"."dedupe_key" is not null;--> statement-breakpoint
 CREATE INDEX "link_clicks_workspace_idx" ON "link_clicks" USING btree ("workspace_id","clicked_at");--> statement-breakpoint
 CREATE INDEX "link_clicks_link_idx" ON "link_clicks" USING btree ("link_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "links_automation_node_uq" ON "links" USING btree ("automation_id","node_id",coalesce("button_id", ''));--> statement-breakpoint
 CREATE INDEX "media_files_workspace_idx" ON "media_files" USING btree ("workspace_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "messages_account_external_uq" ON "messages" USING btree ("instagram_account_id","external_id") WHERE "messages"."external_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "messages_account_external_uq" ON "messages" USING btree ("channel_account_id","external_id") WHERE "messages"."external_id" is not null;--> statement-breakpoint
 CREATE INDEX "messages_conversation_idx" ON "messages" USING btree ("conversation_id","created_at");--> statement-breakpoint
 CREATE INDEX "messages_workspace_created_idx" ON "messages" USING btree ("workspace_id","created_at");--> statement-breakpoint
 CREATE INDEX "messages_execution_idx" ON "messages" USING btree ("execution_id");--> statement-breakpoint
@@ -562,4 +625,5 @@ CREATE INDEX "system_errors_created_idx" ON "system_errors" USING btree ("create
 CREATE UNIQUE INDEX "tags_workspace_name_uq" ON "tags" USING btree ("workspace_id",lower("name"));--> statement-breakpoint
 CREATE INDEX "webhook_events_received_idx" ON "webhook_events" USING btree ("received_at");--> statement-breakpoint
 CREATE INDEX "webhook_events_status_idx" ON "webhook_events" USING btree ("status");--> statement-breakpoint
+CREATE UNIQUE INDEX "whatsapp_templates_account_name_lang_uq" ON "whatsapp_templates" USING btree ("channel_account_id","name","language");--> statement-breakpoint
 CREATE INDEX "workspace_members_user_idx" ON "workspace_members" USING btree ("user_id");

@@ -4,9 +4,11 @@
  * Executa blocos em sequência até: terminar, precisar esperar (bloco
  * "Aguardar", resposta do contato ou nova tentativa de envio) ou falhar.
  * Todo efeito colateral passa pelo `EngineRuntime`, o que permite rodar o
- * mesmo fluxo em produção (banco + Instagram) e no simulador (memória).
+ * mesmo fluxo em produção (banco + canal real) e no simulador (memória).
  */
 import {
+  CHANNEL_INFO,
+  formatPhone,
   LIMITS,
   NODE_INFO,
   nextNodeId,
@@ -15,6 +17,7 @@ import {
   type Flow,
   type FlowNode,
   type NodeDataMap,
+  type Channel,
 } from "@veloxia/shared";
 import type { ExecutionContext, ExecutionStep } from "../db/schema";
 import { ChannelError, type OutboundContent, type SendOutcome } from "./channel";
@@ -25,6 +28,8 @@ export interface RuntimeContact {
   externalId: string;
   name: string | null;
   username: string | null;
+  /** WhatsApp: telefone com DDI. */
+  phone: string | null;
   isFollower: boolean | null;
   lastInboundAt: Date | null;
   tagIds: Set<string>;
@@ -35,7 +40,10 @@ export interface EngineRuntime {
   executionId: string;
   automationId: string | null;
   timezone: string;
-  accountUsername: string | null;
+  /** Canal desta execução. */
+  channel: Channel;
+  /** Como a conta aparece em {{conta}}: "@loja" no Instagram, nome/número no WhatsApp. */
+  accountDisplay: string | null;
   contact: RuntimeContact;
   now(): Date;
   /** Envia conteúdo e registra a mensagem. Lança ChannelError em falhas. */
@@ -47,6 +55,8 @@ export interface EngineRuntime {
   handoff(): Promise<void>;
   /** URL rastreável para cliques (ou a própria URL quando não rastreada). */
   trackedUrl(nodeId: string, buttonId: string | undefined, url: string, track: boolean): Promise<string>;
+  /** Link wa.me de um número do WhatsApp conectado (null = nenhum conectado). */
+  whatsappLink(accountId: string, prefill: string): Promise<string | null>;
   /** Persistência intermediária após cada bloco (evita reenvios após falhas). */
   checkpoint?(state: ExecState): Promise<void>;
 }
@@ -117,9 +127,10 @@ function variablesFor(rt: EngineRuntime, extra: Record<string, string>): Record<
     primeiro_nome: nome.split(/\s+/)[0] ?? "",
     nome_instagram: igName,
     username: c.username ? `@${c.username}` : "",
+    telefone: c.phone ? formatPhone(c.phone) : "",
     data,
     hora,
-    conta: rt.accountUsername ? `@${rt.accountUsername}` : "",
+    conta: rt.accountDisplay ?? "",
     ...extra,
   };
 }
@@ -143,13 +154,16 @@ export async function runFlow(flow: Flow, initial: ExecState, rt: EngineRuntime,
 
   const send = async (node: FlowNode, content: OutboundContent): Promise<RunResult | null> => {
     const usePrivateReply = state.context.origin === "comment" && !state.context.privateReplyUsed && !!state.context.commentId;
-    if (!usePrivateReply) {
+    // Modelos aprovados do WhatsApp podem ser enviados fora da janela de 24h.
+    if (!usePrivateReply && content.kind !== "template") {
       const last = rt.contact.lastInboundAt;
-      if (!last || rt.now().getTime() - last.getTime() > LIMITS.messagingWindowHours * 3600_000) {
+      if (!last || rt.now().getTime() - last.getTime() > CHANNEL_INFO[rt.channel].messagingWindowHours * 3600_000) {
         const message =
           state.context.origin === "comment"
             ? "A pessoa ainda não respondeu à resposta privada; a Meta só permite novas mensagens depois que ela responder."
-            : "Fora da janela de 24h: o Instagram só permite responder até 24h após a última mensagem do contato.";
+            : rt.channel === "whatsapp"
+              ? "Fora da janela de 24h: no WhatsApp, depois de 24h sem resposta só é possível enviar um modelo aprovado."
+              : "Fora da janela de 24h: o Instagram só permite responder até 24h após a última mensagem do contato.";
         step(node, "error", message);
         return { status: "failed", errorCode: "window_closed", errorMessage: message, state };
       }
@@ -316,8 +330,9 @@ export async function runFlow(flow: Flow, initial: ExecState, rt: EngineRuntime,
 
       case "delay": {
         const d = node.data as NodeDataMap["delay"];
-        const seconds = Math.min(Math.max(1, d.seconds), LIMITS.maxDelaySeconds);
-        step(node, "waiting", `Aguardando ${seconds}s`);
+        const max = rt.channel === "whatsapp" ? LIMITS.maxSequenceDelaySeconds : LIMITS.maxDelaySeconds;
+        const seconds = Math.min(Math.max(1, d.seconds), max);
+        step(node, "waiting", `Aguardando ${formatDuration(seconds)}`);
         await rt.checkpoint?.(state);
         return { status: "waiting", waitType: "delay", waitUntil: new Date(rt.now().getTime() + seconds * 1000), state };
       }
@@ -344,6 +359,50 @@ export async function runFlow(flow: Flow, initial: ExecState, rt: EngineRuntime,
         state.steps[state.steps.length - 1].status = "waiting";
         await rt.checkpoint?.(state);
         return { status: "waiting", waitType: "input", waitUntil: new Date(rt.now().getTime() + INPUT_WAIT_HOURS * 3600_000), state };
+      }
+
+      case "whatsapp_template": {
+        const d = node.data as NodeDataMap["whatsapp_template"];
+        if (rt.channel !== "whatsapp") {
+          step(node, "skipped", "Modelo do WhatsApp não se aplica a este canal");
+          next = nextNodeId(flow, node.id, "out");
+          break;
+        }
+        const params: string[] = [];
+        for (const p of d.bodyParams) params.push(await render(p));
+        let previewText = d.bodyText;
+        params.forEach((value, i) => (previewText = previewText.split(`{{${i + 1}}}`).join(value)));
+        const failed = await send(node, {
+          kind: "template",
+          name: d.templateName,
+          language: d.language || "pt_BR",
+          previewText: previewText || `Modelo: ${d.templateName}`,
+          bodyParams: params,
+          headerImageUrl: d.headerImageUrl || undefined,
+        });
+        if (failed) return failed;
+        next = nextNodeId(flow, node.id, "out");
+        break;
+      }
+
+      case "whatsapp_handoff": {
+        const d = node.data as NodeDataMap["whatsapp_handoff"];
+        if (rt.channel === "whatsapp") {
+          step(node, "skipped", "O contato já está no WhatsApp");
+          next = nextNodeId(flow, node.id, "out");
+          break;
+        }
+        const waUrl = await rt.whatsappLink(d.accountId, await render(d.prefill));
+        if (!waUrl) {
+          const message = "Nenhum número do WhatsApp conectado para o bloco \"Levar para o WhatsApp\". Conecte um número em Canais.";
+          step(node, "error", message);
+          return { status: "failed", errorCode: "invalid_config:whatsapp_missing", errorMessage: message, state };
+        }
+        const url = await rt.trackedUrl(node.id, undefined, waUrl, true);
+        const failed = await send(node, { kind: "buttons", text: await render(d.text), buttons: [{ type: "url", title: d.buttonTitle, url }] });
+        if (failed) return failed;
+        next = nextNodeId(flow, node.id, "out");
+        break;
       }
 
       case "handoff": {
@@ -374,4 +433,13 @@ export async function runFlow(flow: Flow, initial: ExecState, rt: EngineRuntime,
 
   state.currentNodeId = null;
   return { status: "completed", state };
+}
+
+/** "45s", "5 min", "2 h", "3 dias". */
+export function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
+  if (seconds < 86400) return `${Math.round((seconds / 3600) * 10) / 10} h`.replace(".", ",");
+  const days = Math.round((seconds / 86400) * 10) / 10;
+  return `${String(days).replace(".", ",")} ${days === 1 ? "dia" : "dias"}`;
 }

@@ -42,13 +42,13 @@ describe("webhook", () => {
   });
 
   it("rejeita assinatura inválida e não registra o evento", async () => {
-    const res = await postWebhook(dmPayload(account.igUserId, "111", "link"), { signature: "sha256=deadbeef" });
+    const res = await postWebhook(dmPayload(account.externalId, "111", "link"), { signature: "sha256=deadbeef" });
     expect(res.statusCode).toBe(401);
     expect(await db.select().from(webhookEvents)).toHaveLength(0);
   });
 
   it("entrega duplicada do mesmo corpo é registrada uma única vez", async () => {
-    const payload = dmPayload(account.igUserId, "111", "oi", "mid.dup.1");
+    const payload = dmPayload(account.externalId, "111", "oi", "mid.dup.1");
     expect((await postWebhook(payload)).statusCode).toBe(200);
     expect((await postWebhook(payload)).statusCode).toBe(200);
     expect(await db.select().from(webhookEvents)).toHaveLength(1);
@@ -62,7 +62,7 @@ describe("motor de automação", () => {
       buttonTitle: "Ver produto",
     });
 
-    const res = await postWebhook(dmPayload(account.igUserId, "IGSID-ANA", "Você tem o LINK?", "mid.in.1"));
+    const res = await postWebhook(dmPayload(account.externalId, "IGSID-ANA", "Você tem o LINK?", "mid.in.1"));
     expect(res.statusCode).toBe(200);
     await drain();
 
@@ -116,13 +116,13 @@ describe("motor de automação", () => {
   it("a automação mais específica tem prioridade; prioridade manual se sobrepõe", async () => {
     await createQuick("Genérica", ["link"], "Resposta genérica");
     const specific = await createQuick("Específica", ["link produto"], "Resposta específica");
-    await postWebhook(dmPayload(account.igUserId, "U1", "me manda o link produto"));
+    await postWebhook(dmPayload(account.externalId, "U1", "me manda o link produto"));
     await drain();
     expect(graph.sends()[0].body.message.text).toBe("Resposta específica");
 
     const generic = (await api(s, "GET", "/api/automations")).json().automations.find((a: any) => a.name === "Genérica");
     await api(s, "PATCH", `/api/automations/${generic.id}`, { priority: 10 });
-    await postWebhook(dmPayload(account.igUserId, "U2", "me manda o link produto"));
+    await postWebhook(dmPayload(account.externalId, "U2", "me manda o link produto"));
     await drain();
     expect(graph.sends()[1].body.message.text).toBe("Resposta genérica");
     expect(specific.id).toBeTruthy();
@@ -130,7 +130,7 @@ describe("motor de automação", () => {
 
   it("anti-duplicidade: mensagens repetidas em sequência disparam o fluxo uma vez (cooldown)", async () => {
     await createQuick("Link", ["link"], "Aqui está o link");
-    for (let i = 0; i < 3; i++) await postWebhook(dmPayload(account.igUserId, "SPAM", "LINK", `mid.spam.${i}`));
+    for (let i = 0; i < 3; i++) await postWebhook(dmPayload(account.externalId, "SPAM", "LINK", `mid.spam.${i}`));
     await drain();
     expect(graph.sends()).toHaveLength(1);
     const execs = await db.select().from(automationExecutions);
@@ -141,12 +141,12 @@ describe("motor de automação", () => {
   it("automações pausadas não disparam; atendimento humano pausa o contato", async () => {
     const a = await createQuick("Preço", ["preço"], "O preço está no site");
     await api(s, "POST", `/api/automations/${a.id}/status`, { status: "paused" });
-    await postWebhook(dmPayload(account.igUserId, "P1", "qual o preco?"));
+    await postWebhook(dmPayload(account.externalId, "P1", "qual o preco?"));
     await drain();
     expect(graph.sends()).toHaveLength(0);
 
     await api(s, "POST", `/api/automations/${a.id}/status`, { status: "active" });
-    await postWebhook(dmPayload(account.igUserId, "P1", "qual o preco?"));
+    await postWebhook(dmPayload(account.externalId, "P1", "qual o preco?"));
     await drain();
     expect(graph.sends()).toHaveLength(1);
   });
@@ -157,18 +157,18 @@ describe("motor de automação", () => {
     expect(edited.statusCode, edited.body).toBe(200);
     expect(edited.json().automation.hasUnpublishedChanges).toBe(true);
 
-    await postWebhook(dmPayload(account.igUserId, "E1", "tem cupom?"));
+    await postWebhook(dmPayload(account.externalId, "E1", "tem cupom?"));
     await drain();
     expect(graph.sends().at(-1)!.body.message.text).toBe("Cupom: OLA10");
 
     await api(s, "POST", `/api/automations/${a.id}/publish`);
-    await postWebhook(dmPayload(account.igUserId, "E2", "tem cupom?"));
+    await postWebhook(dmPayload(account.externalId, "E2", "tem cupom?"));
     await drain();
     expect(graph.sends().at(-1)!.body.message.text).toBe("Cupom: VOLTA15");
 
     // Uma execução aguardando um bloco "Aguardar" não envia nada depois da exclusão.
     const delayed = await createQuick("Brinde", ["brinde"], "Seu brinde chegou", { delaySeconds: 60 });
-    await postWebhook(dmPayload(account.igUserId, "E3", "quero o brinde"));
+    await postWebhook(dmPayload(account.externalId, "E3", "quero o brinde"));
     await drain();
     const sendsBefore = graph.sends().length;
     const [waiting] = await db.select().from(automationExecutions).where(eq(automationExecutions.automationId, delayed.id));
@@ -217,7 +217,7 @@ describe("motor de automação", () => {
     const created = await api(s, "POST", "/api/automations", { name: "Catálogo", mode: "flow", flow, publish: true });
     expect(created.statusCode, created.body).toBe(201);
 
-    await postWebhook(dmPayload(account.igUserId, "LEAD1", "quero o catalogo"));
+    await postWebhook(dmPayload(account.externalId, "LEAD1", "quero o catalogo"));
     await drain();
     expect(graph.sends().map((c) => c.body.message.text)).toEqual(["Oi! Já vou ver isso."]);
 
@@ -232,15 +232,15 @@ describe("motor de automação", () => {
     expect(quick.quick_replies.map((q: any) => q.title)).toEqual(["SIM", "NÃO"]);
 
     // Contato toca em "SIM" (quick reply)
-    await postWebhook(dmPayload(account.igUserId, "LEAD1", "SIM", "mid.qr.1", { quick_reply: { payload: quick.quick_replies[0].payload } }));
+    await postWebhook(dmPayload(account.externalId, "LEAD1", "SIM", "mid.qr.1", { quick_reply: { payload: quick.quick_replies[0].payload } }));
     await drain();
     expect(graph.sends()[2].body.message.text).toBe("Qual é o seu melhor e-mail?");
 
-    await postWebhook(dmPayload(account.igUserId, "LEAD1", "não sei", "mid.cap.1"));
+    await postWebhook(dmPayload(account.externalId, "LEAD1", "não sei", "mid.cap.1"));
     await drain();
     expect(graph.sends()[3].body.message.text).toBe("E-mail inválido, tente de novo.");
 
-    await postWebhook(dmPayload(account.igUserId, "LEAD1", "Ana@Exemplo.com", "mid.cap.2"));
+    await postWebhook(dmPayload(account.externalId, "LEAD1", "Ana@Exemplo.com", "mid.cap.2"));
     await drain();
     expect(graph.sends()[4].body.message.text).toBe("Enviamos para ana@exemplo.com ✅");
     [ex] = await db.select().from(automationExecutions);
@@ -273,7 +273,7 @@ describe("motor de automação", () => {
       object: "instagram",
       entry: [
         {
-          id: account.igUserId,
+          id: account.externalId,
           time: Date.now(),
           changes: [{ field: "comments", value: { id: "C1", text: "LINK", from: { id: "COMMENTER-1", username: "joao" }, media: { id: "M1", media_product_type: "REELS" } } }],
         },
@@ -292,13 +292,13 @@ describe("motor de automação", () => {
     // Nosso próprio comentário (resposta pública) não dispara automação.
     await postWebhook({
       object: "instagram",
-      entry: [{ id: account.igUserId, time: Date.now(), changes: [{ field: "comments", value: { id: "C2", text: "link", from: { id: account.igUserId, username: "minhaloja" }, media: { id: "M1" } } }] }],
+      entry: [{ id: account.externalId, time: Date.now(), changes: [{ field: "comments", value: { id: "C2", text: "link", from: { id: account.externalId, username: "minhaloja" }, media: { id: "M1" } } }] }],
     });
     await drain();
     expect(graph.sends()).toHaveLength(1);
 
     // Pessoa responde no Direct → conversão
-    await postWebhook(dmPayload(account.igUserId, "COMMENTER-1", "obrigado!"));
+    await postWebhook(dmPayload(account.externalId, "COMMENTER-1", "obrigado!"));
     await drain();
     const [after] = await db.select().from(commentEvents).where(eq(commentEvents.commentId, "C1"));
     expect(after.convertedAt).not.toBeNull();
@@ -315,7 +315,7 @@ describe("motor de automação", () => {
         : undefined,
     );
     await createQuick("Link", ["link"], "Aqui");
-    await postWebhook(dmPayload(account.igUserId, "X1", "link"));
+    await postWebhook(dmPayload(account.externalId, "X1", "link"));
     await drain();
     const [ex] = await db.select().from(automationExecutions);
     expect(ex.status).toBe("failed");
@@ -334,7 +334,7 @@ describe("motor de automação", () => {
       return undefined;
     });
     await createQuick("Link", ["link"], "Aqui está");
-    await postWebhook(dmPayload(account.igUserId, "R1", "link"));
+    await postWebhook(dmPayload(account.externalId, "R1", "link"));
     await drain();
     let [ex] = await db.select().from(automationExecutions);
     expect(ex.status).toBe("waiting");
