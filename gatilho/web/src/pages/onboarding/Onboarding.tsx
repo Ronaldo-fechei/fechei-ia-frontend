@@ -234,7 +234,7 @@ export default function Onboarding() {
             </div>
           </Card>
           <div className="hidden lg:block">
-            <PhonePreview incoming={keywords[0] ? `Oi! Me manda o ${keywords[0].text}?` : undefined} outputs={outputs} />
+            <PhonePreview incoming={keywords[0] ? `Oi! Me manda o ${keywords[0].text}?` : undefined} outputs={outputs} accountName={account?.username} />
             <p className="mt-3 text-center text-xs text-zinc-500">Pré-visualização da resposta</p>
           </div>
         </div>

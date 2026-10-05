@@ -61,7 +61,7 @@ const NAV: NavItem[] = [
   { to: "/app/ajuda", label: "Ajuda", icon: <LifeBuoy /> },
 ];
 
-function useInstagramAccounts() {
+export function useInstagramAccounts() {
   return useQuery({ queryKey: ["instagram-accounts"], queryFn: () => api.get<{ accounts: InstagramAccount[] }>("/instagram/accounts"), staleTime: 60_000 });
 }
 

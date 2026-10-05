@@ -10,6 +10,7 @@ import { MessageEditor } from "../../../components/automation/MessageEditor";
 import { PhonePreview, previewText } from "../../../components/automation/PhonePreview";
 import { Simulator } from "../../../components/automation/Simulator";
 import { StatusBadge } from "../../../components/automation/badges";
+import { useInstagramAccounts } from "../../../components/layout/AppLayout";
 import { Button, ButtonLink, Callout, Card, CardTitle, Field, Input, PageHeader, Select, Skeleton, Switch } from "../../../components/ui";
 import { useAutomation, useAutomationActions } from "../../../hooks/useAutomations";
 import { api, ApiError, errorMessage } from "../../../lib/api";
@@ -118,6 +119,7 @@ export default function AutomationForm() {
   const editing = !!id;
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const account = useInstagramAccounts().data?.accounts[0];
   const { data, isLoading } = useAutomation(id);
   const { invalidate } = useAutomationActions();
   const automation = data?.automation;
@@ -405,6 +407,7 @@ export default function AutomationForm() {
           <PhonePreview
             incoming={isMention ? "📣 Mencionou você em um Story" : form.keywords[0] ? `Oi! Me manda o ${form.keywords[0].text}?` : isComment ? "(comentou na sua publicação)" : undefined}
             outputs={previewOutputs}
+            accountName={account?.username}
             footer={form.delaySeconds ? `Enviada após ${DELAY_PRESETS.find((d) => d.seconds === form.delaySeconds)?.label ?? `${form.delaySeconds}s`}` : undefined}
           />
           {editing && automation ? (
