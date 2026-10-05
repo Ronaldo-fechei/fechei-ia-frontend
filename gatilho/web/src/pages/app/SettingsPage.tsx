@@ -502,7 +502,9 @@ export default function SettingsPage() {
   const [params, setParams] = useSearchParams();
   const tab = (params.get("aba") as Tab) ?? "perfil";
   const setTab = (t: Tab) => setParams({ aba: t }, { replace: true });
-  useEffect(() => window.scrollTo({ top: 0 }), [tab]);
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [tab]);
   return (
     <div>
       <PageHeader title="Configurações" />

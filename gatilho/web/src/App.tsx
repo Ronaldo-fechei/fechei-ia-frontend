@@ -66,7 +66,9 @@ function RootError() {
   const error = useRouteError() as Error | undefined;
   const chunkError = error?.message?.includes("dynamically imported module") || error?.message?.includes("Failed to fetch");
   // O usuário vê só a mensagem amigável; o detalhe fica no console para diagnóstico.
-  useEffect(() => console.error(error), [error]);
+  useEffect(() => {
+    console.error(error);
+  }, [error]);
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-4 p-6 text-center">
       <h1 className="text-xl font-semibold">{chunkError ? "Uma nova versão está disponível" : "Algo deu errado"}</h1>

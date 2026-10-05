@@ -333,7 +333,9 @@ export function AppLayout() {
   const { pathname } = useLocation();
   const fullBleed = pathname.includes("/fluxo") || pathname.startsWith("/app/conversas");
   useLiveEvents(true);
-  useEffect(() => setMobileOpen(false), [pathname]);
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   return (
     <div className="min-h-dvh">

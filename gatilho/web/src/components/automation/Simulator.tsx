@@ -31,8 +31,12 @@ export function Simulator({ automationId, defaultEvent = "dm", className, useDra
   const [pending, setPending] = useState<SimulationResult | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
-  useEffect(() => setEvent(defaultEvent), [defaultEvent]);
-  useEffect(() => bottom.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), [entries]);
+  useEffect(() => {
+    setEvent(defaultEvent);
+  }, [defaultEvent]);
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [entries]);
 
   const run = async (text: string, reply?: { text?: string; payload?: string }) => {
     setLoading(true);
