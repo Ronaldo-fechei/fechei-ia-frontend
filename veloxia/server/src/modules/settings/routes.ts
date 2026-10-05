@@ -47,20 +47,4 @@ export async function settingsRoutes(app: FastifyInstance) {
   });
 
   /** Planos, assinatura atual e uso. Pagamento online ainda não é oferecido. */
-  app.get("/billing", async (req) => {
-    const auth = requireAuth(req);
-    const { plan, subscription } = await getWorkspacePlan(auth.workspace.id);
-    const all = await db.select().from(plans).orderBy(asc(plans.sortOrder));
-    return {
-      currentPlanId: plan.id,
-      subscription,
-      usage: await getUsage(auth.workspace.id),
-      plans: all.filter((p) => p.isPublic || p.id === plan.id),
-      payments: {
-        enabled: false,
-        message: "O pagamento online ainda não está disponível. Para mudar de plano, fale com o suporte.",
-        supportEmail: env.SUPPORT_EMAIL || null,
-      },
-    };
-  });
 }

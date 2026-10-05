@@ -20,7 +20,7 @@ export type JobType =
   | "channel.subscribe_webhooks"
   | "channel.refresh_token"
   | "whatsapp.sync_templates"
-  | "billing.promo_end"
+  | "billing.mp_notification"
   | "maintenance.tick";
 
 export type Job = typeof jobs.$inferSelect;

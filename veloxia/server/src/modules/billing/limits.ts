@@ -29,8 +29,14 @@ export async function getWorkspacePlan(workspaceId: string, tx: DbOrTx = db) {
     .limit(1);
   const row = rows[0];
   const now = new Date();
+  // Planos pagos pelo Mercado Pago valem até o fim do período pago (+3 dias de tolerância para a cobrança).
+  const paidExpired =
+    row?.subscription.provider === "mercadopago" &&
+    !!row.subscription.currentPeriodEnd &&
+    row.subscription.currentPeriodEnd.getTime() + 3 * 86400_000 < now.getTime();
   const valid =
     row &&
+    !paidExpired &&
     (row.subscription.status === "active" ||
       (row.subscription.status === "trialing" && (!row.subscription.trialEndsAt || row.subscription.trialEndsAt > now)) ||
       (row.subscription.status === "past_due" && (!row.subscription.currentPeriodEnd || row.subscription.currentPeriodEnd > now)) ||

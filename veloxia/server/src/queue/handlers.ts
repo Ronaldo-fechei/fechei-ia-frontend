@@ -7,6 +7,8 @@ import { fetchContactProfile, runExecutionJob } from "../engine/executor";
 import { processWebhookEvent } from "../engine/processor";
 import { refreshAccountToken, scanTokens, subscribeAccountWebhooks } from "../channels/accounts";
 import { syncTemplates } from "../modules/whatsapp/service";
+import { applyPromoEnds, handleMercadoPagoNotification } from "../modules/billing/service";
+import { paymentsConfigured } from "../config/env";
 import { logger } from "../lib/logger";
 import { notify } from "../services/notifications";
 import { eq, lt } from "drizzle-orm";
@@ -24,6 +26,7 @@ export const jobHandlers: JobHandlers = {
   "whatsapp.sync_templates": async (p: { accountId: string }) => {
     await syncTemplates(p.accountId);
   },
+  "billing.mp_notification": async (p: { type: string; id: string }) => handleMercadoPagoNotification(p.type, p.id),
   "maintenance.tick": async () => maintenanceTick(),
 };
 
@@ -71,6 +74,7 @@ export async function maintenanceTick(): Promise<void> {
     lastHourly = now;
     await scanTokens();
     await db.delete(oauthStates).where(lt(oauthStates.expiresAt, new Date()));
+    if (paymentsConfigured()) await applyPromoEnds();
   }
   if (now - lastDaily > 86400_000) {
     lastDaily = now;

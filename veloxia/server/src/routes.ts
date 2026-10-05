@@ -7,6 +7,7 @@ import { automationRoutes } from "./modules/automations/routes";
 import { crmRoutes } from "./modules/crm/routes";
 import { eventRoutes } from "./modules/events/routes";
 import { inboxRoutes } from "./modules/inbox/routes";
+import { billingRoutes } from "./modules/billing/routes";
 import { channelRoutes } from "./modules/channels/routes";
 import { instagramRoutes } from "./modules/instagram/routes";
 import { mediaRoutes } from "./modules/media/routes";
@@ -34,6 +35,7 @@ export async function apiRoutes(app: FastifyInstance) {
   await app.register(analyticsRoutes);
   await app.register(notificationRoutes);
   await app.register(settingsRoutes);
+  await app.register(billingRoutes);
   await app.register(mediaRoutes);
   await app.register(aiRoutes);
   await app.register(eventRoutes);

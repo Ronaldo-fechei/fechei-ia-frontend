@@ -6,7 +6,8 @@
  *   Se o banco falhar, responde 500 e a Meta reenvia (nenhum evento se perde).
  */
 import type { FastifyInstance } from "fastify";
-import { env, webhookConfigured, whatsappWebhookConfigured } from "../../config/env";
+import { env, isProd, paymentsConfigured, webhookConfigured, whatsappWebhookConfigured } from "../../config/env";
+import { verifyMercadoPagoSignature } from "../../integrations/mercadopago/client";
 import { db } from "../../db/client";
 import { webhookEvents } from "../../db/schema";
 import { safeEqual, sha256, verifyMetaSignature } from "../../lib/crypto";
@@ -71,5 +72,40 @@ export async function webhookRoutes(app: FastifyInstance) {
     configured: whatsappWebhookConfigured,
     secret: () => env.META_APP_SECRET,
     objects: ["whatsapp_business_account"],
+  });
+
+  /**
+   * Mercado Pago: notificações de assinaturas e pagamentos.
+   * A assinatura (x-signature) é validada com MP_WEBHOOK_SECRET; o estado real é
+   * sempre buscado na API do Mercado Pago pelo job (nada do corpo é confiado).
+   */
+  app.post("/webhooks/mercadopago", { config: { rateLimit: false } }, async (req, reply) => {
+    if (!paymentsConfigured() || (isProd && !env.MP_WEBHOOK_SECRET)) {
+      return reply.code(503).send({ error: { code: "not_configured", message: "Pagamentos não configurados." } });
+    }
+    const q = req.query as Record<string, string | undefined>;
+    const body = (req.body ?? {}) as { type?: string; topic?: string; action?: string; data?: { id?: string | number } };
+    const type = String(body.type ?? q.type ?? body.topic ?? q.topic ?? "");
+    const dataId = String(q["data.id"] ?? body.data?.id ?? q.id ?? "");
+    if (env.MP_WEBHOOK_SECRET) {
+      const ok = verifyMercadoPagoSignature({
+        signature: req.headers["x-signature"] as string | undefined,
+        requestId: req.headers["x-request-id"] as string | undefined,
+        dataId,
+        secret: env.MP_WEBHOOK_SECRET,
+      });
+      if (!ok) {
+        req.log.warn("webhook do Mercado Pago com assinatura inválida rejeitado");
+        return reply.code(401).send({ error: { code: "invalid_signature", message: "Assinatura inválida." } });
+      }
+    }
+    if (type && dataId) {
+      await enqueue(
+        "billing.mp_notification",
+        { type, id: dataId },
+        { dedupeKey: `mp:${type}:${dataId}:${String(body.action ?? "")}:${Math.floor(Date.now() / 60_000)}`, maxAttempts: 10 },
+      );
+    }
+    return reply.code(200).send({ ok: true });
   });
 }
