@@ -1,0 +1,39 @@
+# Blueprint GRATUITO do Render — para testar, não para clientes reais.
+# Caminho para informar no Render: veloxia/render-free.yaml
+#
+# Diferenças em relação ao render.yaml (pago):
+# - o site "dorme" após ~15 min sem acesso e leva ~1 min para acordar
+#   (webhooks atrasam e os blocos "Aguardar" ficam parados enquanto ele dorme);
+# - o banco de dados não é criado no Render: use um PostgreSQL grátis do Neon
+#   (neon.com) e cole a connection string em DATABASE_URL ao criar o Blueprint
+#   (desative "Connection pooling" no Neon — a fila usa LISTEN/NOTIFY).
+services:
+  - type: web
+    name: veloxia
+    runtime: docker
+    plan: free
+    dockerContext: ./veloxia
+    dockerfilePath: ./veloxia/Dockerfile
+    buildFilter:
+      paths:
+        - veloxia/**
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: RUN_WORKER
+        value: "true"
+      - key: DATABASE_SSL
+        value: "true"
+      - key: APP_SECRET
+        generateValue: true
+      # Chave dos tokens criptografados, gerada pelo Render. Nunca troque: trocar invalida as conexões.
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      # Pedidos na criação do Blueprint:
+      - key: DATABASE_URL # connection string do Neon (postgresql://...)
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: SUPPORT_EMAIL
+        sync: false
