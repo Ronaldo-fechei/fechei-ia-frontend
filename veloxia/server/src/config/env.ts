@@ -104,6 +104,7 @@ function load(): Env {
     throw new Error(`Configuração inválida:\n${issues}`);
   }
   const env = parsed.data;
+  env.DATABASE_URL = normalizeDatabaseUrl(env.DATABASE_URL);
   // No Render, o endereço público vem pronto em RENDER_EXTERNAL_URL (dispensa configurar APP_URL).
   if (!process.env.APP_URL && process.env.RENDER_EXTERNAL_URL) env.APP_URL = process.env.RENDER_EXTERNAL_URL.replace(/\/+$/, "");
   if (env.NODE_ENV === "production") {
@@ -116,6 +117,17 @@ function load(): Env {
   if (!env.APP_SECRET) env.APP_SECRET = "dev-only-secret-change-me-dev-only-secret";
   if (!env.ENCRYPTION_KEY) env.ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64"); // apenas desenvolvimento/testes
   return env;
+}
+
+/**
+ * Aceita a URL pura ou um trecho de .env colado inteiro (ex.: o botão "Copiar .env" do Neon,
+ * com DATABASE_URL="..." e DATABASE_URL_POOLED="..."): extrai a URL e prefere a conexão
+ * direta (sem "-pooler"), necessária para LISTEN/NOTIFY.
+ */
+export function normalizeDatabaseUrl(value: string): string {
+  const urls = value.match(/postgres(?:ql)?:\/\/[^\s"'`]+/g);
+  if (!urls) return value.trim();
+  return urls.find((u) => !u.includes("-pooler")) ?? urls[0];
 }
 
 function validEncryptionKey(value: string): boolean {
