@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectKeywordGroups, parseFlow, validateFlow, type Flow } from "./flow";
+import { collectKeywordGroups, flowChannels, parseFlow, validateFlow, type Flow } from "./flow";
 import { quickAutomationSchema, quickToFlow } from "./quick";
 import { TEMPLATES } from "./templates";
 import { renderVariables } from "./variables";
@@ -100,8 +100,51 @@ describe("validação de fluxo", () => {
   it("todos os modelos são estruturalmente válidos (exceto URLs a preencher)", () => {
     for (const tpl of TEMPLATES) {
       const v = validateFlow(parseFlow(tpl.build()));
-      const structural = v.errors.filter((e) => !/URL/i.test(e.message));
+      const structural = v.errors.filter((e) => !/URL|modelo aprovado/i.test(e.message));
       expect(structural, tpl.id).toEqual([]);
     }
+  });
+});
+
+describe("canais", () => {
+  const base = (triggerData: Record<string, unknown>, extraNodes: any[] = [], extraEdges: any[] = []) =>
+    parseFlow({
+      version: 1,
+      nodes: [
+        { id: "t", type: "trigger", position: { x: 0, y: 0 }, data: triggerData },
+        { id: "k", type: "keyword", position: { x: 0, y: 1 }, data: { keywords: [{ text: "oi" }] } },
+        { id: "m", type: "message", position: { x: 0, y: 2 }, data: { text: "Olá" } },
+        ...extraNodes,
+      ],
+      edges: [
+        { id: "e1", source: "t", sourceHandle: "out", target: "k" },
+        { id: "e2", source: "k", sourceHandle: "out", target: "m" },
+        ...extraEdges,
+      ],
+    });
+
+  it("fluxos antigos (sem canais) continuam no Instagram", () => {
+    expect(flowChannels(base({ event: "dm" }))).toEqual(["instagram"]);
+  });
+
+  it("comentários só existem no Instagram", () => {
+    const v = validateFlow(base({ event: "comment", channels: ["instagram", "whatsapp"] }));
+    expect(v.errors.some((e) => e.message.includes("não existe no WhatsApp"))).toBe(true);
+  });
+
+  it("bloco de modelo exige WhatsApp no gatilho; Levar para o WhatsApp exige Instagram", () => {
+    const tpl = { id: "w", type: "whatsapp_template", position: { x: 0, y: 3 }, data: { templateName: "x", bodyText: "Oi" } };
+    const edge = { id: "e3", source: "m", sourceHandle: "out", target: "w" };
+    expect(validateFlow(base({ event: "dm", channels: ["instagram"] }, [tpl], [edge])).errors.some((e) => e.message.includes("só funciona no WhatsApp"))).toBe(true);
+    expect(validateFlow(base({ event: "dm", channels: ["whatsapp"] }, [tpl], [edge])).valid).toBe(true);
+    const handoff = { id: "w", type: "whatsapp_handoff", position: { x: 0, y: 3 }, data: {} };
+    expect(validateFlow(base({ event: "dm", channels: ["whatsapp"] }, [handoff], [edge])).errors.some((e) => e.message.includes("só funciona no Instagram"))).toBe(true);
+  });
+
+  it("espera maior que 23h só no WhatsApp", () => {
+    const delay = { id: "d", type: "delay", position: { x: 0, y: 3 }, data: { seconds: 2 * 86400 } };
+    const edge = { id: "e3", source: "m", sourceHandle: "out", target: "d" };
+    expect(validateFlow(base({ event: "dm", channels: ["instagram"] }, [delay], [edge])).valid).toBe(false);
+    expect(validateFlow(base({ event: "dm", channels: ["whatsapp"] }, [delay], [edge])).valid).toBe(true);
   });
 });

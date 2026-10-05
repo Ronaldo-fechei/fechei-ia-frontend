@@ -33,12 +33,14 @@ export async function buildApp(): Promise<FastifyInstance> {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
+        // SDK oficial da Meta para o cadastro incorporado do WhatsApp (Embedded Signup).
+        scriptSrc: ["'self'", "https://connect.facebook.net"],
+        frameSrc: ["'self'", "https://www.facebook.com", "https://web.facebook.com", "https://business.facebook.com"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "blob:", "https:"],
         mediaSrc: ["'self'", "https:"],
         fontSrc: ["'self'", "data:"],
-        connectSrc: ["'self'"],
+        connectSrc: ["'self'", "https://graph.facebook.com", "https://www.facebook.com", "https://connect.facebook.net"],
         frameAncestors: ["'none'"],
         formAction: ["'self'"],
         objectSrc: ["'none'"],
@@ -46,6 +48,8 @@ export async function buildApp(): Promise<FastifyInstance> {
       },
     },
     crossOriginEmbedderPolicy: false,
+    // A janela de login da Meta conversa com a página que a abriu (postMessage).
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
     crossOriginResourcePolicy: { policy: "cross-origin" },
   });
   await app.register(cookie);

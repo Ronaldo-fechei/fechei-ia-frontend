@@ -1,7 +1,18 @@
 /** Estado das integrações: mostra ao usuário o que precisa ser configurado. */
 import type { FastifyInstance } from "fastify";
 import { APP_NAME } from "@veloxia/shared";
-import { aiConfigured, emailConfigured, env, metaConfigured, urls, webhookConfigured } from "../../config/env";
+import {
+  aiConfigured,
+  emailConfigured,
+  env,
+  metaConfigured,
+  paymentsConfigured,
+  urls,
+  webhookConfigured,
+  whatsappConfigured,
+  whatsappRates,
+  whatsappWebhookConfigured,
+} from "../../config/env";
 
 export async function systemRoutes(app: FastifyInstance) {
   app.get("/system/status", async (req) => {
@@ -9,6 +20,8 @@ export async function systemRoutes(app: FastifyInstance) {
       appName: APP_NAME,
       emailEnabled: emailConfigured() || env.NODE_ENV !== "production",
       instagramEnabled: metaConfigured(),
+      whatsappEnabled: whatsappConfigured(),
+      paymentsEnabled: paymentsConfigured(),
       aiEnabled: aiConfigured(),
       supportEmail: env.SUPPORT_EMAIL || null,
     };
@@ -31,6 +44,15 @@ export async function systemRoutes(app: FastifyInstance) {
           humanAgentEnabled: env.META_HUMAN_AGENT_ENABLED,
           httpsOk: env.APP_URL.startsWith("https://"),
         },
+        whatsapp: {
+          appConfigured: whatsappConfigured(),
+          webhookConfigured: whatsappWebhookConfigured(),
+          webhookUrl: urls.whatsappWebhook(),
+          webhookFields: ["messages", "message_template_status_update"],
+          permissions: ["whatsapp_business_management", "whatsapp_business_messaging"],
+          rates: whatsappRates(),
+        },
+        payments: { configured: paymentsConfigured(), provider: "Mercado Pago", webhookUrl: urls.mercadoPagoWebhook() },
         email: { configured: emailConfigured() },
         ai: { configured: aiConfigured(), model: aiConfigured() ? env.AI_MODEL : null },
       },

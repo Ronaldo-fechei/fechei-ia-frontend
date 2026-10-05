@@ -256,3 +256,10 @@ export function waStatusPayload(phoneNumberId: string, messageId: string, status
     ],
   };
 }
+
+/** Muda o plano do espaço de trabalho (equivale a uma assinatura ativa). */
+export async function setPlan(workspaceId: string, planId: string): Promise<void> {
+  const { subscriptions } = await import("../src/db/schema");
+  const { eq } = await import("drizzle-orm");
+  await db.update(subscriptions).set({ planId, status: "active", updatedAt: new Date() }).where(eq(subscriptions.workspaceId, workspaceId));
+}
