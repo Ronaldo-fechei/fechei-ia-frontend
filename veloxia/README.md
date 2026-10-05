@@ -203,7 +203,7 @@ docker run -p 3333:3333 \
   veloxia
 ```
 
-- **Render:** o arquivo [`render.yaml`](render.yaml) cria o serviço web e o PostgreSQL. Em *New → Blueprint*, escolha o repositório e informe o caminho `veloxia/render.yaml`. Use um plano pago: instâncias gratuitas hibernam, atrasando webhooks e pausando os blocos "Aguardar".
+- **Render:** o arquivo [`render.yaml`](render.yaml) cria o serviço web e o PostgreSQL. Em *New → Blueprint*, escolha o repositório e informe o caminho `veloxia/render.yaml`. O Render gera `APP_SECRET` e `ENCRYPTION_KEY`, e o endereço público vem de `RENDER_EXTERNAL_URL` (defina `APP_URL` só ao usar domínio próprio). `ENCRYPTION_KEY` aceita 32 bytes em base64 ou qualquer segredo aleatório com 32+ caracteres. Use um plano pago: instâncias gratuitas hibernam, atrasando webhooks e pausando os blocos "Aguardar".
 - **Railway, Fly.io, VPS, Kubernetes:** qualquer host de containers + PostgreSQL gerenciado. Requisitos: HTTPS público (a Meta exige), `TRUST_PROXY=true` atrás de proxy, `DATABASE_SSL=true` se o banco exigir SSL.
 - **Worker separado:** para escalar, rode a API com `RUN_WORKER=false` e um ou mais workers com `node dist/worker.js` (mesma imagem e mesmas variáveis).
 - **Health check:** `GET /health`.

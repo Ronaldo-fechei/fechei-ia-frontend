@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
-import { env } from "../config/env";
+import { encryptionKeyBytes, env } from "../config/env";
 
 /* ------------------------------------------------------------------ */
 /* Tokens aleatórios e hashes                                          */
@@ -67,9 +67,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
 /* ------------------------------------------------------------------ */
 
 function encryptionKey(): Buffer {
-  const key = Buffer.from(env.ENCRYPTION_KEY, "base64");
-  if (key.length !== 32) throw new Error("ENCRYPTION_KEY deve ter 32 bytes em base64 (gere com: openssl rand -base64 32)");
-  return key;
+  return encryptionKeyBytes();
 }
 
 /** Formato: v1:<iv>:<tag>:<ciphertext> (base64url). */

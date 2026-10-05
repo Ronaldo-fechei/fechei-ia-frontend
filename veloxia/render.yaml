@@ -27,11 +27,12 @@ services:
           property: connectionString
       - key: APP_SECRET
         generateValue: true
-      # Valores pedidos na criação do Blueprint (não ficam no repositório):
-      - key: APP_URL # ex.: https://app.seudominio.com.br (sem barra no final)
-        sync: false
-      - key: ENCRYPTION_KEY # gere com: openssl rand -base64 32 — guarde uma cópia; trocar invalida as conexões
-        sync: false
+      # Chave dos tokens criptografados, gerada pelo Render. Nunca troque: trocar invalida as conexões.
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      # APP_URL não é necessária no Render: o endereço público vem de RENDER_EXTERNAL_URL.
+      # Ao ligar um domínio próprio, adicione APP_URL=https://app.seudominio.com.br no painel.
+      # Valores pedidos na criação do Blueprint (todos podem ficar em branco agora):
       - key: INSTAGRAM_APP_ID
         sync: false
       - key: INSTAGRAM_APP_SECRET

@@ -3,6 +3,7 @@
  * Integrações externas são opcionais: quando ausentes, o painel mostra
  * exatamente o que precisa ser configurado (veja /api/system/status).
  */
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { z } from "zod";
 
@@ -103,16 +104,33 @@ function load(): Env {
     throw new Error(`Configuração inválida:\n${issues}`);
   }
   const env = parsed.data;
+  // No Render, o endereço público vem pronto em RENDER_EXTERNAL_URL (dispensa configurar APP_URL).
+  if (!process.env.APP_URL && process.env.RENDER_EXTERNAL_URL) env.APP_URL = process.env.RENDER_EXTERNAL_URL.replace(/\/+$/, "");
   if (env.NODE_ENV === "production") {
     const missing: string[] = [];
     if (env.APP_SECRET.length < 32) missing.push("APP_SECRET (mínimo 32 caracteres)");
-    if (Buffer.from(env.ENCRYPTION_KEY, "base64").length !== 32) missing.push("ENCRYPTION_KEY (32 bytes em base64: openssl rand -base64 32)");
+    if (!validEncryptionKey(env.ENCRYPTION_KEY)) missing.push("ENCRYPTION_KEY (32 bytes em base64 — openssl rand -base64 32 — ou um segredo aleatório com 32+ caracteres)");
     if (!env.APP_URL.startsWith("https://")) missing.push("APP_URL com https://");
     if (missing.length) throw new Error(`Variáveis obrigatórias em produção ausentes: ${missing.join(", ")}`);
   }
   if (!env.APP_SECRET) env.APP_SECRET = "dev-only-secret-change-me-dev-only-secret";
   if (!env.ENCRYPTION_KEY) env.ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64"); // apenas desenvolvimento/testes
   return env;
+}
+
+function validEncryptionKey(value: string): boolean {
+  return Buffer.from(value, "base64").length === 32 || value.length >= 32;
+}
+
+/**
+ * Chave AES-256 a partir de ENCRYPTION_KEY: 32 bytes em base64 são usados diretamente;
+ * qualquer outro segredo com 32+ caracteres (ex.: gerado pelo Render) passa por SHA-256.
+ */
+export function encryptionKeyBytes(): Buffer {
+  const raw = Buffer.from(env.ENCRYPTION_KEY, "base64");
+  if (raw.length === 32) return raw;
+  if (env.ENCRYPTION_KEY.length >= 32) return createHash("sha256").update(env.ENCRYPTION_KEY, "utf8").digest();
+  throw new Error("ENCRYPTION_KEY inválida: use 32 bytes em base64 (openssl rand -base64 32) ou um segredo aleatório com 32+ caracteres");
 }
 
 export const env = load();
