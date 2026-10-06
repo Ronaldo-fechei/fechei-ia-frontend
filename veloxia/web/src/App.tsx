@@ -27,6 +27,7 @@ const KeywordsPage = lazy(() => import("./pages/app/KeywordsPage"));
 const InboxPage = lazy(() => import("./pages/app/InboxPage"));
 const ContactsPage = lazy(() => import("./pages/app/ContactsPage"));
 const ChannelsPage = lazy(() => import("./pages/app/ChannelsPage"));
+const ConnectGuidePage = lazy(() => import("./pages/app/ConnectGuidePage"));
 const TemplatesPage = lazy(() => import("./pages/app/TemplatesPage"));
 const AnalyticsPage = lazy(() => import("./pages/app/AnalyticsPage"));
 const SettingsPage = lazy(() => import("./pages/app/SettingsPage"));
@@ -121,6 +122,7 @@ export const router = createBrowserRouter([
               { path: "contatos", element: <S><ContactsPage /></S> },
               { path: "contatos/:id", element: <S><ContactsPage /></S> },
               { path: "canais", element: <S><ChannelsPage /></S> },
+              { path: "como-conectar", element: <S><ConnectGuidePage /></S> },
               { path: "instagram", element: <Navigate to="/app/canais?canal=instagram" replace /> },
               { path: "modelos", element: <S><TemplatesPage /></S> },
               { path: "analytics", element: <S><AnalyticsPage /></S> },

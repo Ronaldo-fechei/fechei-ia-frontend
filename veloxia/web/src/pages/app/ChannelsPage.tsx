@@ -1,7 +1,8 @@
 import { useSearchParams } from "react-router";
 import { CHANNELS, CHANNEL_INFO, type Channel } from "@veloxia/shared";
 import { ChannelGlyph } from "../../components/brand/Logo";
-import { PageHeader, Tabs } from "../../components/ui";
+import { BookOpenCheck } from "lucide-react";
+import { ButtonLink, PageHeader, Tabs } from "../../components/ui";
 import { useChannelAccounts } from "../../hooks/useChannels";
 import { InstagramPanel } from "./InstagramPage";
 import { WhatsAppPanel } from "./WhatsAppPanel";
@@ -16,7 +17,15 @@ export default function ChannelsPage() {
 
   return (
     <div>
-      <PageHeader title="Canais" description="Conexões oficiais com a Meta. Conecte o Instagram, o WhatsApp ou os dois." />
+      <PageHeader
+        title="Canais"
+        description="Conexões oficiais com a Meta. Conecte o Instagram, o WhatsApp ou os dois."
+        actions={
+          <ButtonLink to={`/app/como-conectar?canal=${channel}`} variant="secondary" icon={<BookOpenCheck className="size-4" />}>
+            Passo a passo
+          </ButtonLink>
+        }
+      />
       <Tabs
         className="mb-6"
         value={channel}
