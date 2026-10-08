@@ -68,9 +68,9 @@ const schema = z.object({
   WHATSAPP_RATES_BRL: z.string().default('{"marketing":0.3217,"utility":0.035,"authentication":0.035,"service":0.035}'),
 
   // Pagamentos (Mercado Pago)
-  MP_ACCESS_TOKEN: z.string().default(""),
+  MP_ACCESS_TOKEN: z.string().trim().default(""),
   /** Assinatura secreta dos webhooks (Suas integrações → Webhooks). */
-  MP_WEBHOOK_SECRET: z.string().default(""),
+  MP_WEBHOOK_SECRET: z.string().trim().default(""),
   MP_API_URL: z.string().default("https://api.mercadopago.com"),
 
   // E-mail (SMTP)
