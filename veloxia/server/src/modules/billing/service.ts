@@ -286,9 +286,20 @@ export async function syncPayment(paymentId: string): Promise<void> {
 /** Trata uma notificação do Mercado Pago (tipo + id do recurso). */
 export async function handleMercadoPagoNotification(type: string, id: string): Promise<void> {
   if (!id) return;
-  if (type === "subscription_preapproval" || type === "preapproval") return syncPreapproval(id);
-  if (type === "subscription_authorized_payment" || type === "authorized_payment") return syncAuthorizedPayment(id);
-  if (type === "payment") return syncPayment(id);
+  try {
+    if (type === "subscription_preapproval" || type === "preapproval") return await syncPreapproval(id);
+    if (type === "subscription_authorized_payment" || type === "authorized_payment") return await syncAuthorizedPayment(id);
+    if (type === "payment") return await syncPayment(id);
+  } catch (err) {
+    // O botão "Simular notificação" do painel do Mercado Pago manda um data.id fictício
+    // (ex.: 123456) que não existe de verdade — a API responde 404. Isso é esperado e não
+    // deve esgotar as tentativas do job nem virar alerta de erro interno.
+    if (err instanceof MercadoPagoError && err.status === 404) {
+      logger.warn({ type, id }, "notificação do Mercado Pago para um recurso inexistente (ex.: simulação) — ignorada");
+      return;
+    }
+    throw err;
+  }
 }
 
 /* ------------------------------------------------------------------ */

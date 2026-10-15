@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { db } from "../src/db/client";
-import { billingPayments, subscriptions } from "../src/db/schema";
+import { billingPayments, jobs, subscriptions } from "../src/db/schema";
 import { applyPromoEnds } from "../src/modules/billing/service";
 import { getWorkspacePlan } from "../src/modules/billing/limits";
 import { api, drain, getApp, mockGraph, resetDb, signup, type GraphCall, type Session } from "./helpers";
@@ -37,9 +37,17 @@ function mpResponder(call: GraphCall) {
     return { status: 201, body: { id, init_point: `https://mp.test/checkout?pref_id=${id}` } };
   }
   const pay = path.match(/^\/v1\/payments\/(.+)$/);
-  if (pay) return { body: mp.payments.get(pay[1]) };
+  if (pay) {
+    const current = mp.payments.get(pay[1]);
+    // Reflete a API real: um data.id que não existe (ex.: o "123456" fictício do botão
+    // "Simular notificação" do painel) devolve 404, não 200 com corpo vazio.
+    return current ? { body: current } : { status: 404, body: { message: "payment not found" } };
+  }
   const ap = path.match(/^\/authorized_payments\/(.+)$/);
-  if (ap) return { body: mp.authorized.get(ap[1]) };
+  if (ap) {
+    const current = mp.authorized.get(ap[1]);
+    return current ? { body: current } : { status: 404, body: { message: "authorized payment not found" } };
+  }
   return { status: 404, body: { message: "rota MP não simulada" } };
 }
 
@@ -188,5 +196,26 @@ describe("plano anual (Checkout Pro)", () => {
   it("plano gratuito não tem checkout", async () => {
     const res = await api(s, "POST", "/api/billing/checkout", { planId: "free", cycle: "monthly" });
     expect(res.statusCode).toBe(400);
+  });
+});
+
+describe("webhook do Mercado Pago", () => {
+  it("assinatura válida → 200; assinatura inválida → 401", async () => {
+    const ok = await mpWebhook("payment", "123456");
+    expect(ok.statusCode).toBe(200);
+    const bad = await mpWebhook("payment", "123456", { badSignature: true });
+    expect(bad.statusCode).toBe(401);
+    expect(bad.json().error.code).toBe("invalid_signature");
+  });
+
+  it("data.id fictício do botão 'Simular notificação' (MP devolve 404) nunca derruba o job", async () => {
+    // Não registramos "123456" em mp.payments — a chamada GET /v1/payments/123456 simulada
+    // devolve 404, exatamente como a API real faz para o id fictício da simulação.
+    const res = await mpWebhook("payment", "123456");
+    expect(res.statusCode).toBe(200); // a resposta ao MP nunca depende do processamento assíncrono
+    await drain();
+    const [job] = await db.select().from(jobs).where(eq(jobs.type, "billing.mp_notification"));
+    expect(job.status).toBe("done");
+    expect(job.attempts).toBe(1); // não ficou tentando de novo: o 404 foi tratado como esperado
   });
 });

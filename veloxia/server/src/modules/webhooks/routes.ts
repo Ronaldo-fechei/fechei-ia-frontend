@@ -87,10 +87,12 @@ export async function webhookRoutes(app: FastifyInstance) {
     const body = (req.body ?? {}) as { type?: string; topic?: string; action?: string; data?: { id?: string | number } };
     const type = String(body.type ?? q.type ?? body.topic ?? q.topic ?? "");
     const dataId = String(q["data.id"] ?? body.data?.id ?? q.id ?? "");
+    // Normaliza: alguns proxies podem repetir o cabeçalho (vira array); usamos sempre o primeiro valor.
+    const singleHeader = (h: string | string[] | undefined) => (Array.isArray(h) ? h[0] : h);
     if (env.MP_WEBHOOK_SECRET) {
       const ok = verifyMercadoPagoSignature({
-        signature: req.headers["x-signature"] as string | undefined,
-        requestId: req.headers["x-request-id"] as string | undefined,
+        signature: singleHeader(req.headers["x-signature"]),
+        requestId: singleHeader(req.headers["x-request-id"]),
         dataId,
         secret: env.MP_WEBHOOK_SECRET,
       });

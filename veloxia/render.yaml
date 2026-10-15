@@ -17,6 +17,12 @@ services:
       paths:
         - veloxia/**
     healthCheckPath: /health
+    # Vincula o Environment Group "veloxia" (criado no painel do Render) a este serviço.
+    # Sem esta linha o grupo NÃO é aplicado automaticamente: variáveis definidas só nele
+    # (ex.: MP_ACCESS_TOKEN, MP_WEBHOOK_SECRET) podem nunca chegar ao container, ou um
+    # valor antigo deixado como var individual do serviço pode sombrear o do grupo.
+    envVarGroups:
+      - veloxia
     envVars:
       - key: NODE_ENV
         value: production
@@ -46,10 +52,9 @@ services:
         sync: false
       - key: WHATSAPP_CONFIG_ID
         sync: false
-      - key: MP_ACCESS_TOKEN # Mercado Pago
-        sync: false
-      - key: MP_WEBHOOK_SECRET
-        sync: false
+      # MP_ACCESS_TOKEN e MP_WEBHOOK_SECRET vêm do Environment Group "veloxia" (acima) —
+      # não declarar aqui também, para não correr o risco de um valor desatualizado
+      # salvo diretamente no serviço sombrear o valor atual do grupo.
       - key: SUPPORT_EMAIL
         sync: false
       - key: ADMIN_EMAILS

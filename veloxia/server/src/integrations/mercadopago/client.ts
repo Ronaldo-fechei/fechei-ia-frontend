@@ -144,20 +144,23 @@ export const mercadoPago = {
 /**
  * Valida a assinatura do webhook (cabeçalho x-signature: "ts=...,v1=...").
  * Manifesto: "id:<data.id>;request-id:<x-request-id>;ts:<ts>;" com HMAC-SHA256 da chave secreta.
+ * Segue o algoritmo de referência oficial do Mercado Pago ao pé da letra: o data.id sempre
+ * em minúsculas (não só quando é inteiramente alfanumérico) e cada parte do manifesto omitida
+ * quando o dado correspondente não chegou.
  */
 export function verifyMercadoPagoSignature(opts: { signature?: string; requestId?: string; dataId?: string; secret: string }): boolean {
   if (!opts.signature || !opts.secret) return false;
   const parts = Object.fromEntries(
     opts.signature.split(",").map((p) => {
       const [k, ...v] = p.trim().split("=");
-      return [k, v.join("=")];
+      return [k.trim(), v.join("=").trim()];
     }),
   );
   const ts = parts.ts;
-  const v1 = parts.v1;
+  const v1 = parts.v1?.toLowerCase();
   if (!ts || !v1) return false;
   let manifest = "";
-  if (opts.dataId) manifest += `id:${/^[a-z0-9]+$/i.test(opts.dataId) ? opts.dataId.toLowerCase() : opts.dataId};`;
+  if (opts.dataId) manifest += `id:${opts.dataId.toLowerCase()};`;
   if (opts.requestId) manifest += `request-id:${opts.requestId};`;
   manifest += `ts:${ts};`;
   const expected = createHmac("sha256", opts.secret).update(manifest).digest("hex");

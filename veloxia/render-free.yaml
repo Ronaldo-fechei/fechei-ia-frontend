@@ -19,6 +19,9 @@ services:
       paths:
         - veloxia/**
     healthCheckPath: /health
+    # Mesmo Environment Group "veloxia" usado no render.yaml pago (Mercado Pago, etc.).
+    envVarGroups:
+      - veloxia
     envVars:
       - key: NODE_ENV
         value: production
