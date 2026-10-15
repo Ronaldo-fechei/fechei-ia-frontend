@@ -10,6 +10,7 @@ import { aiConfigured, env } from "../../config/env";
 import { db } from "../../db/client";
 import { aiGenerations } from "../../db/schema";
 import { AppError, unavailable } from "../../lib/errors";
+import { logger } from "../../lib/logger";
 import { recordSystemError } from "../../services/audit";
 import { assertLimit, hasFeature, incrementUsage, USAGE_METRICS } from "../billing/limits";
 
@@ -86,8 +87,13 @@ async function guard(ws: WorkspaceVoice): Promise<void> {
 
 function mapError(err: unknown): never {
   if (err instanceof AppError) throw err;
+  if (err instanceof Anthropic.APIError) {
+    // Nunca logar a chave (ela nem chega a fazer parte do erro: status/mensagem vêm da resposta do provedor).
+    logger.warn({ status: err.status, message: err.message }, "[ai] erro do provedor");
+  }
   if (err instanceof Anthropic.RateLimitError) throw new AppError(429, "ai_rate_limited", "A IA está ocupada no momento. Tente novamente em alguns segundos.");
   if (err instanceof Anthropic.AuthenticationError) throw unavailable("A chave da IA é inválida. Verifique ANTHROPIC_API_KEY.");
+  if (err instanceof Anthropic.NotFoundError) throw unavailable("O modelo de IA configurado (AI_MODEL) não existe ou foi descontinuado.");
   if (err instanceof Anthropic.APIError) throw new AppError(502, "ai_error", "Não foi possível gerar a sugestão agora. Tente novamente.");
   throw err;
 }

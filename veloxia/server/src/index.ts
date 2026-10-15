@@ -9,6 +9,10 @@ import { QueueWorker } from "./queue/worker";
 import { closeEvents } from "./services/events";
 
 async function main() {
+  // Integrações opcionais: avisa uma vez no boot quando faltar configurar, em vez de
+  // só falhar silenciosamente na primeira chamada do usuário.
+  if (!env.ANTHROPIC_API_KEY) logger.warn("[ai] ANTHROPIC_API_KEY ausente — a geração com IA fica desativada até configurá-la.");
+
   if (process.env.MIGRATE_ON_START !== "false") await runMigrations();
   const app = await buildApp();
   await app.listen({ port: env.PORT, host: env.HOST });

@@ -82,8 +82,10 @@ const schema = z.object({
   SMTP_FROM: z.string().default(""),
 
   // IA (opcional)
-  ANTHROPIC_API_KEY: z.string().default(""),
-  AI_MODEL: z.string().default("claude-opus-5-5"),
+  ANTHROPIC_API_KEY: z.string().trim().default(""),
+  // "claude-opus-5-5" (valor antigo) não existe — não é um model id válido da Anthropic
+  // e toda chamada falhava com 404 "not_found_error". Modelo atual: claude-opus-5.
+  AI_MODEL: z.string().default("claude-opus-5"),
 
   // Operação
   RUN_WORKER: bool(true),
