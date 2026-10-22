@@ -16,7 +16,7 @@ export function AuthLayout({ title, subtitle, children, footer }: { title: strin
         <div aria-hidden="true" className="pointer-events-none absolute -top-40 -left-40 size-[28rem] rounded-full bg-brand-300/25 blur-3xl" />
 
         <Link to="/" className="relative w-fit">
-          <Logo />
+          <Logo size="lg" />
         </Link>
 
         <div className="relative mx-auto flex w-full max-w-md flex-1 flex-col justify-center py-10">

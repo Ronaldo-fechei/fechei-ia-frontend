@@ -12,11 +12,12 @@ export function LogoMark({ className }: { className?: string }) {
   );
 }
 
-export function Logo({ className, dark }: { className?: string; dark?: boolean }) {
+export function Logo({ className, dark, size = "md" }: { className?: string; dark?: boolean; size?: "md" | "lg" }) {
+  const lg = size === "lg";
   return (
-    <span className={cn("inline-flex items-center gap-2", className)}>
-      <LogoMark />
-      <span className={cn("text-lg font-bold tracking-tight", dark ? "text-white" : "text-zinc-900")}>{APP_NAME}</span>
+    <span className={cn("inline-flex items-center", lg ? "gap-2.5" : "gap-2", className)}>
+      <LogoMark className={lg ? "size-11" : undefined} />
+      <span className={cn("font-bold tracking-tight", lg ? "text-2xl" : "text-lg", dark ? "text-white" : "text-zinc-900")}>{APP_NAME}</span>
     </span>
   );
 }
