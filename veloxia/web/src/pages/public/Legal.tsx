@@ -1,4 +1,4 @@
-import { APP_NAME } from "@veloxia/shared";
+import { APP_NAME, COMPANY_CNPJ, COMPANY_LEGAL_NAME } from "@veloxia/shared";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { Logo } from "../../components/brand/Logo";
@@ -20,7 +20,8 @@ function Privacy({ contact }: { contact: ReactNode }) {
       <p className="mt-2 text-sm text-zinc-500">Em conformidade com a Lei Geral de Proteção de Dados (Lei 13.709/2018 — LGPD).</p>
       <Section title="1. Quem somos">
         <p>
-          O {APP_NAME} é uma plataforma que permite a empresas e criadores automatizar respostas no Instagram por meio das APIs oficiais da Meta. Para
+          O {APP_NAME} é uma plataforma que permite a empresas e criadores automatizar respostas no Instagram e no WhatsApp por meio das APIs oficiais
+          da Meta. O serviço é operado por {COMPANY_LEGAL_NAME}, inscrita no CNPJ sob o nº {COMPANY_CNPJ}, controladora dos dados da sua conta. Para
           dúvidas sobre privacidade, fale com {contact}.
         </p>
       </Section>
@@ -84,8 +85,9 @@ function Terms({ contact }: { contact: ReactNode }) {
       <h1 className="text-3xl font-semibold tracking-tight">Termos de Uso</h1>
       <Section title="1. O serviço">
         <p>
-          O {APP_NAME} automatiza respostas no Instagram usando exclusivamente as APIs oficiais da Meta. O funcionamento depende da sua conta
-          profissional do Instagram, das permissões que você conceder e da disponibilidade das APIs da Meta.
+          O {APP_NAME}, operado por {COMPANY_LEGAL_NAME} (CNPJ {COMPANY_CNPJ}), automatiza respostas no Instagram e no WhatsApp usando exclusivamente
+          as APIs oficiais da Meta. O funcionamento depende da sua conta profissional do Instagram ou da sua conta do WhatsApp Business, das
+          permissões que você conceder e da disponibilidade das APIs da Meta.
         </p>
       </Section>
       <Section title="2. Suas responsabilidades">
@@ -137,6 +139,9 @@ export default function Legal({ kind }: { kind: "privacy" | "terms" }) {
         <Link to="/termos" className="hover:underline">
           Termos
         </Link>
+      </p>
+      <p className="mt-2 text-xs text-zinc-400">
+        {COMPANY_LEGAL_NAME} · CNPJ {COMPANY_CNPJ}
       </p>
     </div>
   );

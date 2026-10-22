@@ -15,7 +15,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { APP_NAME, APP_SLOGAN, APP_TAGLINE, type BillingCycle } from "@veloxia/shared";
+import { APP_NAME, APP_SLOGAN, APP_TAGLINE, COMPANY_CNPJ, COMPANY_LEGAL_NAME, type BillingCycle } from "@veloxia/shared";
 import { CycleToggle, PlanCards } from "../../components/billing/PlanCards";
 import { InstagramGlyph, Logo, WhatsAppGlyph } from "../../components/brand/Logo";
 import { ButtonLink } from "../../components/ui";
@@ -268,7 +268,12 @@ export default function Landing() {
               Exclusão de dados
             </Link>
           </div>
-          <p className="text-xs">Instagram e WhatsApp são marcas da Meta Platforms, Inc. O {APP_NAME} não é afiliado à Meta.</p>
+          <div className="text-center text-xs sm:text-right">
+            <p>
+              {APP_NAME} é um produto de {COMPANY_LEGAL_NAME} · CNPJ {COMPANY_CNPJ}
+            </p>
+            <p className="mt-1">Instagram e WhatsApp são marcas da Meta Platforms, Inc. O {APP_NAME} não é afiliado à Meta.</p>
+          </div>
         </div>
       </footer>
     </div>

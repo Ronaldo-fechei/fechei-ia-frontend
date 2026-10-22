@@ -1,6 +1,9 @@
 export const APP_NAME = "Veloxia";
 /** Slogan da marca. */
 export const APP_SLOGAN = "Automação de conversas para negócios";
+/** Empresa responsável pelo serviço (exibida no rodapé e nos documentos legais). */
+export const COMPANY_LEGAL_NAME = "Martins Store Comercial LTDA";
+export const COMPANY_CNPJ = "54.471.703/0001-27";
 export const APP_TAGLINE = "Responda Instagram e WhatsApp automaticamente, na hora certa e com a mensagem certa.";
 
 export const AUTOMATION_STATUSES = ["draft", "active", "paused", "error", "archived"] as const;
