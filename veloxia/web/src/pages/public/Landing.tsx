@@ -18,6 +18,7 @@ import { Link } from "react-router";
 import { APP_NAME, APP_SLOGAN, APP_TAGLINE, COMPANY_CNPJ, COMPANY_LEGAL_NAME, type BillingCycle } from "@veloxia/shared";
 import { CycleToggle, PlanCards } from "../../components/billing/PlanCards";
 import { InstagramGlyph, Logo, WhatsAppGlyph } from "../../components/brand/Logo";
+import { PhoneMockup } from "../../components/marketing/PhoneMockup";
 import { ButtonLink } from "../../components/ui";
 import { useAuth } from "../../hooks/useAuth";
 import { api } from "../../lib/api";
@@ -38,38 +39,6 @@ const FEATURES: { icon: ReactNode; title: string; text: string }[] = [
 ];
 
 const AUDIENCE = ["Afiliados", "Influenciadores", "Criadores de conteúdo", "Lojas e e-commerce", "Infoprodutores", "Prestadores de serviço", "Pequenas empresas"];
-
-function ChatPreview() {
-  return (
-    <div className="relative mx-auto w-full max-w-sm">
-      <div className="absolute -inset-6 rounded-[2.5rem] bg-gradient-to-br from-brand-500/30 via-amber-400/10 to-transparent blur-2xl" />
-      <div className="relative rounded-[2rem] border border-white/10 bg-ink-900 p-3 shadow-2xl">
-        <div className="rounded-[1.5rem] bg-white p-4 text-zinc-900">
-          <div className="flex items-center gap-2 border-b border-zinc-100 pb-3">
-            <span className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-brand-200 to-amber-200 text-xs font-bold text-brand-800">SL</span>
-            <div>
-              <p className="text-sm font-semibold">sualoja</p>
-              <p className="text-[11px] text-zinc-400">Exemplo ilustrativo</p>
-            </div>
-          </div>
-          <div className="space-y-2 py-4 text-sm">
-            <div className="ml-auto w-fit max-w-[80%] rounded-2xl rounded-br-md bg-zinc-100 px-3 py-2">Me manda o link? 😍</div>
-            <div className="w-fit max-w-[85%] rounded-2xl rounded-bl-md bg-brand-600 px-3 py-2 text-white">
-              Claro! 😊 Aqui está o link para você conferir o produto 👇
-            </div>
-            <div className="w-fit rounded-xl border border-brand-200 px-4 py-2 text-center text-sm font-medium text-brand-700">Ver produto</div>
-          </div>
-          <p className="flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-            <Zap className="size-3.5 shrink-0" />
-            <span>
-              Palavra detectada: <strong>link</strong> · respondido em segundos
-            </span>
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function Pricing({ loggedIn }: { loggedIn: boolean }) {
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
@@ -172,7 +141,7 @@ export default function Landing() {
               <span>· Sem cartão de crédito. Nunca pedimos sua senha.</span>
             </p>
           </div>
-          <ChatPreview />
+          <PhoneMockup />
         </div>
       </section>
 

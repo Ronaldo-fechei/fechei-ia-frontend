@@ -2,6 +2,7 @@ import { KeyRound, MessageCircle, ShieldCheck, Sparkles, Zap } from "lucide-reac
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { ChannelGlyph, Logo } from "../../components/brand/Logo";
+import { usePrefersReducedMotion } from "../../hooks/useReducedMotion";
 import { cn } from "../../lib/cn";
 
 export function AuthLayout({ title, subtitle, children, footer }: { title: string; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode }) {
@@ -110,18 +111,6 @@ const SCENARIOS: Scenario[] = [
 
 const STEP_TIMES = [250, 1000, 2300]; // mensagem recebida → digitando → resposta
 const SCENARIO_MS = 6500;
-
-function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(() => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
-  useEffect(() => {
-    const mq = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-    if (!mq) return;
-    const onChange = () => setReduced(mq.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-  return reduced;
-}
 
 function ShowcasePanel() {
   const reduced = usePrefersReducedMotion();
