@@ -83,9 +83,9 @@ const schema = z.object({
 
   // IA (opcional)
   ANTHROPIC_API_KEY: z.string().trim().default(""),
-  // "claude-opus-5-5" (valor antigo) não existe — não é um model id válido da Anthropic
-  // e toda chamada falhava com 404 "not_found_error". Modelo atual: claude-opus-5.
-  AI_MODEL: z.string().default("claude-opus-5"),
+  // Textos curtos (rascunhos de automação e reescritas): o Sonnet 5.5 entrega boa qualidade
+  // por menos da metade do custo do Opus. Troque pela variável AI_MODEL se quiser outro.
+  AI_MODEL: z.string().trim().default("claude-sonnet-5-5"),
 
   // Operação
   RUN_WORKER: bool(true),

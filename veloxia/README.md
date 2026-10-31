@@ -228,7 +228,7 @@ Todas estão documentadas em [`.env.example`](.env.example). As essenciais:
 | `WHATSAPP_RATES_BRL` | opcional | Preços por mensagem (R$) usados só na estimativa de consumo |
 | `MP_ACCESS_TOKEN` / `MP_WEBHOOK_SECRET` | para cobrar planos | Mercado Pago |
 | `SMTP_*` | recomendado | Recuperação de senha por e-mail |
-| `ANTHROPIC_API_KEY` | opcional | Habilita os recursos de IA (`AI_MODEL`, padrão `claude-opus-5-5`) |
+| `ANTHROPIC_API_KEY` | opcional | Habilita os recursos de IA (`AI_MODEL`, padrão `claude-sonnet-5-5`) |
 | `ADMIN_EMAILS` / `SUPPORT_EMAIL` | opcional | Administradores e contato de suporte |
 
 O servidor valida as variáveis ao iniciar e, em produção, recusa subir sem `APP_SECRET`, `ENCRYPTION_KEY` válida e `APP_URL` com HTTPS.
