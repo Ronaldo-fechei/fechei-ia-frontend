@@ -5,7 +5,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import { LIMITS, MATCH_TYPES, TONE_LABELS, type Tone } from "@veloxia/shared";
+import { CHANNELS, LIMITS, MATCH_TYPES, TONE_LABELS, type Channel, type Tone } from "@veloxia/shared";
+import { listActiveAccounts } from "../../channels/accounts";
 import { aiConfigured, env } from "../../config/env";
 import { db } from "../../db/client";
 import { aiGenerations } from "../../db/schema";
@@ -23,6 +24,7 @@ function getClient(): Anthropic {
 
 export const suggestionSchema = z.object({
   name: z.string(),
+  channels: z.array(z.enum(CHANNELS)),
   triggerEvent: z.enum(["dm", "comment", "story_reply", "story_mention"]),
   keywords: z.array(z.string()),
   matchType: z.enum(MATCH_TYPES),
@@ -52,15 +54,22 @@ function voiceInstructions(ws: WorkspaceVoice): string {
     .join("\n\n");
 }
 
-const SYSTEM_PROMPT = `Você ajuda criadores, lojas e afiliados brasileiros a configurar respostas automáticas oficiais para o Instagram (Direct, comentários e Stories).
+const SYSTEM_PROMPT = `Você ajuda criadores, lojas e afiliados brasileiros a configurar respostas automáticas oficiais para o Instagram (Direct, comentários e Stories) e para o WhatsApp.
 O usuário descreve o que quer e você propõe UMA automação simples para ele revisar antes de publicar.
+
+Canais (channels):
+- "instagram": aceita todos os gatilhos (triggerEvent): "dm" (mensagem no Direct), "comment" (comentário em post ou Reels), "story_reply" (resposta a Story) e "story_mention" (menção em Story).
+- "whatsapp": só aceita o gatilho "dm" (mensagem recebida no WhatsApp). Comentários e Stories não existem no WhatsApp.
+- Use os dois canais juntos (["instagram", "whatsapp"]) só com o gatilho "dm" e só quando o pedido fizer sentido nos dois.
+- Escolha o canal pelo que o usuário pediu. Se ele não disser, prefira um canal que esteja conectado (informado abaixo).
 
 Regras da plataforma (respeite sempre):
 - Mensagens com no máximo ${LIMITS.textMaxLength} caracteres, em português do Brasil, naturais e curtas.
+- No WhatsApp, *negrito* e _itálico_ funcionam; no Instagram não. Se a automação incluir o Instagram, não use essa formatação.
 - Texto de botão com no máximo ${LIMITS.buttonTitleMaxLength} caracteres.
 - Palavras-chave: de 2 a 8 palavras ou expressões curtas que as pessoas realmente digitariam (ex.: "link", "quero", "preço", "onde comprar"), sem duplicatas.
 - Em automações de comentário ("comment"), a resposta é uma única mensagem privada.
-- Variáveis disponíveis: {{primeiro_nome}}, {{nome}}, {{username}}, {{data}}, {{hora}}. Use no máximo uma, com valor padrão, ex.: {{primeiro_nome|tudo bem}}.
+- Variáveis disponíveis: {{primeiro_nome}}, {{nome}}, {{username}}, {{data}}, {{hora}}. Use no máximo uma, com valor padrão, ex.: {{primeiro_nome|tudo bem}}. No WhatsApp {{username}} fica vazio: não use essa variável se a automação incluir o WhatsApp.
 - Nunca invente URLs, preços, prazos ou promessas. Se a resposta precisar de um link, marque needsLink = true e não escreva a URL no texto: o usuário vai preencher.
 - matchType: use "contains_word" na maioria dos casos; "exact" só para palavras de comando únicas.
 - explanation: 1 ou 2 frases explicando a sugestão para o usuário.`;
@@ -76,6 +85,21 @@ async function logGeneration(ws: WorkspaceVoice, userId: string, prompt: string,
     outputTokens: response.usage?.output_tokens,
   });
   await incrementUsage(ws.id, USAGE_METRICS.ai);
+}
+
+/** Canais válidos para o gatilho: WhatsApp só existe para mensagens ("dm"). */
+export function suggestionChannels(channels: Channel[], triggerEvent: AutomationSuggestion["triggerEvent"]): Channel[] {
+  const unique = [...new Set(channels)].filter((c) => (CHANNELS as readonly string[]).includes(c));
+  if (triggerEvent !== "dm") return ["instagram"];
+  return unique.length ? unique : ["instagram"];
+}
+
+async function connectedChannelsNote(workspaceId: string): Promise<string> {
+  const accounts = await listActiveAccounts(workspaceId);
+  const connected = [...new Set(accounts.map((a) => a.channel))];
+  return connected.length
+    ? `Canais conectados nesta conta: ${connected.join(", ")}.`
+    : "Nenhum canal conectado ainda: escolha pelo pedido do usuário (na dúvida, \"instagram\").";
 }
 
 async function guard(ws: WorkspaceVoice): Promise<void> {
@@ -106,7 +130,7 @@ export async function suggestAutomation(ws: WorkspaceVoice, userId: string, prom
       max_tokens: 8000,
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
-      system: `${SYSTEM_PROMPT}\n\n${voiceInstructions(ws)}`,
+      system: `${SYSTEM_PROMPT}\n\n${await connectedChannelsNote(ws.id)}\n\n${voiceInstructions(ws)}`,
       output_config: { effort: "low", format: betaZodOutputFormat(suggestionSchema) },
       messages: [{ role: "user", content: prompt }],
     });
@@ -117,6 +141,7 @@ export async function suggestAutomation(ws: WorkspaceVoice, userId: string, prom
     const keywords = [...new Set(s.keywords.map((k) => k.trim()).filter(Boolean))].slice(0, 15).map((k) => k.slice(0, 100));
     const suggestion: AutomationSuggestion = {
       ...s,
+      channels: suggestionChannels(s.channels, s.triggerEvent),
       name: s.name.trim().slice(0, 80) || "Nova automação",
       keywords: s.triggerEvent === "story_mention" ? [] : keywords,
       message: s.message.trim().slice(0, LIMITS.textMaxLength),
@@ -139,7 +164,7 @@ export async function rewriteText(ws: WorkspaceVoice, userId: string, text: stri
       max_tokens: 4000,
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
-      system: `Você reescreve mensagens de resposta automática do Instagram Direct em português do Brasil, mantendo o sentido, links e variáveis no formato {{variavel}} exatamente como estão. Máximo de ${LIMITS.textMaxLength} caracteres. Não invente informações.\n\n${voiceInstructions(ws)}`,
+      system: `Você reescreve mensagens de resposta automática do Instagram e do WhatsApp em português do Brasil, mantendo o sentido, links e variáveis no formato {{variavel}} exatamente como estão. Máximo de ${LIMITS.textMaxLength} caracteres. Não invente informações.\n\n${voiceInstructions(ws)}`,
       output_config: { effort: "low", format: betaZodOutputFormat(rewriteSchema) },
       messages: [{ role: "user", content: `${goal ? `Objetivo: ${goal}\n\n` : ""}Mensagem original:\n${text}` }],
     });

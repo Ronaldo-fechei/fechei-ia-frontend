@@ -95,6 +95,7 @@ function readAiDraft(): Partial<FormState> | null {
     return {
       name: s.name,
       triggerEvent: s.triggerEvent,
+      ...(Array.isArray(s.channels) && s.channels.length ? { channels: s.channels as Channel[] } : {}),
       keywords: (s.keywords ?? []).map((text: string) => ({ text, matchType: (s.matchType ?? "contains_word") as MatchType, caseSensitive: false, ignoreAccents: true })),
       message: s.message,
       buttonTitle: s.needsLink ? s.buttonTitle || "Ver link" : "",

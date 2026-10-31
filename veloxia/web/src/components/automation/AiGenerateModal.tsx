@@ -1,13 +1,15 @@
 import { Sparkles } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { MATCH_TYPE_LABELS, TRIGGER_EVENT_INFO, type MatchType, type TriggerEvent } from "@veloxia/shared";
+import { CHANNEL_INFO, MATCH_TYPE_LABELS, TRIGGER_EVENT_INFO, type Channel, type MatchType, type TriggerEvent } from "@veloxia/shared";
+import { ChannelGlyph } from "../brand/Logo";
 import { api, errorMessage } from "../../lib/api";
 import { useAuth, useSystemStatus } from "../../hooks/useAuth";
 import { Badge, Button, ButtonLink, Callout, Field, Modal, Textarea } from "../ui";
 
 export interface AiSuggestion {
   name: string;
+  channels: Channel[];
   triggerEvent: "dm" | "comment" | "story_reply" | "story_mention";
   keywords: string[];
   matchType: MatchType;
@@ -20,7 +22,7 @@ export interface AiSuggestion {
 const EXAMPLES = [
   "Quero uma automação para quando alguém pedir o link de um produto.",
   "Quando comentarem EU QUERO no meu Reel, mandar o link do curso no Direct.",
-  "Responder dúvidas sobre frete e prazo de entrega.",
+  "Responder dúvidas sobre frete e prazo de entrega no WhatsApp.",
 ];
 
 /** "Gerar automação com IA" → Revisar → Editar → Publicar. A IA nunca publica sozinha. */
@@ -107,6 +109,16 @@ export function AiGenerateModal({ open, onOpenChange }: { open: boolean; onOpenC
             <div>
               <dt className="text-xs font-medium text-zinc-500">Gatilho</dt>
               <dd>{TRIGGER_EVENT_INFO[suggestion.triggerEvent as TriggerEvent]?.label}</dd>
+            </div>
+            <div className="sm:col-span-2">
+              <dt className="text-xs font-medium text-zinc-500">Canais</dt>
+              <dd className="mt-1 flex flex-wrap gap-1.5">
+                {(suggestion.channels?.length ? suggestion.channels : (["instagram"] as Channel[])).map((c) => (
+                  <Badge key={c} tone="gray">
+                    <ChannelGlyph channel={c} className="size-3.5" /> {CHANNEL_INFO[c].label}
+                  </Badge>
+                ))}
+              </dd>
             </div>
             <div className="sm:col-span-2">
               <dt className="text-xs font-medium text-zinc-500">Palavras-chave ({MATCH_TYPE_LABELS[suggestion.matchType]})</dt>
