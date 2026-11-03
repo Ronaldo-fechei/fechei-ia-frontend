@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { db } from "../src/db/client";
-import { automationExecutions, channelAccounts, oauthStates } from "../src/db/schema";
+import { automationExecutions, channelAccounts, oauthStates, users } from "../src/db/schema";
 import { api, connectTestAccount, dmPayload, drain, getApp, mockGraph, postWebhook, resetDb, signup, type Session } from "./helpers";
 
 let s: Session;
@@ -240,5 +240,28 @@ describe("stories, simulador, palavras-chave, dashboard e analytics", () => {
     expect(await db.select().from(channelAccounts).where(eq(channelAccounts.id, account.id))).toHaveLength(0);
     const bad = await app.inject({ method: "POST", url: "/api/meta/data-deletion", headers: { "content-type": "application/x-www-form-urlencoded" }, payload: `signed_request=abc.${payload}` });
     expect(bad.statusCode).toBe(400);
+  });
+});
+
+describe("painel de administração", () => {
+  it("bloqueia quem não é administrador", async () => {
+    expect((await api(s, "GET", "/api/admin/overview")).statusCode).toBe(403);
+  });
+
+  it("carrega todas as abas e permite trocar o plano de um cliente", async () => {
+    await db.update(users).set({ role: "admin" }).where(eq(users.id, s.userId));
+    await connectTestAccount(s.workspaceId);
+    for (const url of ["/api/admin/overview", "/api/admin/errors", "/api/admin/jobs", "/api/admin/webhooks", "/api/admin/channel-accounts"]) {
+      const res = await api(s, "GET", url);
+      expect(res.statusCode, `${url}: ${res.body}`).toBe(200);
+    }
+    const list = await api(s, "GET", "/api/admin/workspaces");
+    expect(list.statusCode, list.body).toBe(200);
+    const mine = list.json().workspaces.find((w: { id: string }) => w.id === s.workspaceId);
+    expect(mine.accounts).toBe(1);
+
+    const changed = await api(s, "POST", `/api/admin/workspaces/${s.workspaceId}/plan`, { planId: "business" });
+    expect(changed.statusCode, changed.body).toBe(200);
+    expect((await api(s, "GET", "/api/admin/workspaces")).json().workspaces.find((w: { id: string }) => w.id === s.workspaceId).planId).toBe("business");
   });
 });

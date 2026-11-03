@@ -84,7 +84,7 @@ export async function adminRoutes(app: FastifyInstance) {
         ownerEmail: users.email,
         planId: subscriptions.planId,
         status: subscriptions.status,
-        accounts: sql<number>`(select count(*)::int from instagram_accounts ia where ia.workspace_id = ${workspaces.id} and ia.disconnected_at is null)`,
+        accounts: sql<number>`(select count(*)::int from channel_accounts ca where ca.workspace_id = ${workspaces.id} and ca.channel = 'instagram' and ca.disconnected_at is null)`,
       })
       .from(workspaces)
       .innerJoin(users, eq(users.id, workspaces.ownerId))

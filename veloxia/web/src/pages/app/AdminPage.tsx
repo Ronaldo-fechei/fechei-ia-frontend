@@ -3,7 +3,7 @@ import { RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { Navigate } from "react-router";
 import { toast } from "sonner";
-import { Badge, Button, Card, CardTitle, EmptyState, PageHeader, Select, Skeleton, Tabs } from "../../components/ui";
+import { Badge, Button, Callout, Card, CardTitle, EmptyState, PageHeader, Select, Skeleton, Tabs } from "../../components/ui";
 import { StatCard } from "../../components/StatCard";
 import { useMe } from "../../hooks/useAuth";
 import { api, errorMessage } from "../../lib/api";
@@ -134,7 +134,7 @@ function Webhooks() {
 
 function Customers() {
   const qc = useQueryClient();
-  const { data, isLoading } = useQuery({ queryKey: ["admin", "workspaces"], queryFn: () => api.get<{ workspaces: { id: string; name: string; ownerEmail: string; planId: string | null; status: string | null; accounts: number; createdAt: string }[]; plans: { id: string; name: string }[] }>("/admin/workspaces") });
+  const { data, isLoading, error } = useQuery({ queryKey: ["admin", "workspaces"], queryFn: () => api.get<{ workspaces: { id: string; name: string; ownerEmail: string; planId: string | null; status: string | null; accounts: number; createdAt: string }[]; plans: { id: string; name: string }[] }>("/admin/workspaces") });
   const setPlan = async (id: string, planId: string) => {
     try {
       await api.post(`/admin/workspaces/${id}/plan`, { planId });
@@ -145,6 +145,7 @@ function Customers() {
     }
   };
   if (isLoading) return <Skeleton className="h-64" />;
+  if (error) return <Callout tone="error">Não foi possível carregar os clientes: {errorMessage(error)}</Callout>;
   return (
     <Card padded={false} className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -166,6 +167,7 @@ function Customers() {
               <td className="px-4 py-2.5">{relativeTime(w.createdAt)}</td>
               <td className="px-4 py-2.5">
                 <Select value={w.planId ?? ""} onChange={(e) => setPlan(w.id, e.target.value)} className="h-8 max-w-40">
+                  {!w.planId && <option value="">Gratuito (padrão)</option>}
                   {data.plans.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
